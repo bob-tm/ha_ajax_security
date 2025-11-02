@@ -1,0 +1,389 @@
+type: custom:mod-card
+style:
+  restriction-card $: |
+    #overlay.unlocked #subContainer {
+        transition: border-color 0.2s, opacity 0.2s linear !important;
+    }
+card:
+  type: custom:restriction-card
+  duration: 15
+  css_variables:
+    "--restriction-lock-opacity": 0
+    "--restriction-overlay-background": >-
+      repeating-linear-gradient( -45deg, transparent 0
+      10px,var(--user-restriction-card-mask,rgba(127,127,127,0.07)) 10px 20px)
+  restrictions:
+    confirm: null
+  card_mod:
+    style:
+      restriction-card$: |
+        #mainContainer {
+          background: red;
+        }
+      .: |
+        restriction-card {
+          background: teal;
+        }
+  card:
+    type: vertical-stack
+    cards:
+      - type: horizontal-stack
+        cards:
+          - type: custom:button-card
+            entity: sensor.ajax_hub_state
+            icon: mdi:lock-outline
+            layout: icon_name
+            color: darkslategray
+            name: Arm
+            state:
+              - value: Request
+                color: green
+                icon: mdi:power
+                styles:
+                  card:
+                    - animation: blink 1s ease infinite
+              - value: ArmAttempt
+                color: red
+                icon: mdi:alert
+                styles:
+                  card:
+                    - animation: blink 1s ease infinite
+            tap_action:
+              action: call-service
+              service: button.press
+              data:
+                entity_id: button.ajax_hub_arm
+            hold_action:
+              action: call-service
+              service: button.press
+              data:
+                entity_id: button.ajax_hub_force_arm
+            styles:
+              card:
+                - color: gray
+                - padding: 15px 0
+                - border: 0
+                - background: none
+              grid:
+                - display: contents
+              img_cell:
+                - display: contents
+              icon:
+                - margin: 0
+                - margin-right: 0.3em
+                - width: 40px
+                - position: relative
+                - width: 30px
+              name:
+                - font-size: 0.8em
+          - type: custom:button-card
+            entity: button.ajax_hub_disarm
+            icon: mdi:lock-open-outline
+            layout: icon_name
+            name: Disarm
+            color: darkslategray
+            state:
+              - value: Request
+                color: green
+                icon: mdi:power
+                styles:
+                  card:
+                    - animation: blink 1s ease infinite
+            tap_action:
+              action: call-service
+              service: button.press
+              data:
+                entity_id: button.ajax_hub_disarm
+            styles:
+              card:
+                - color: gray
+                - padding: 15px 0
+                - border: 0
+                - background: none
+              grid:
+                - display: contents
+              img_cell:
+                - display: contents
+              icon:
+                - margin: 0
+                - margin-right: 0.3em
+                - width: 40px
+                - position: relative
+                - width: 30px
+              name:
+                - font-size: 0.8em
+          - type: custom:button-card
+            icon: mdi:home-group-minus
+            layout: icon_name
+            name: Group
+            tap_action:
+              action: call-service
+              service: ajax_jeedom.arm_disarm
+              data:
+                entity_id: button.ajax_hub_arm
+                command: DISARM
+                groups: 1,2,4
+            styles:
+              card:
+                - color: gray
+                - padding: 15px 0
+                - border: 0
+                - background: none
+              grid:
+                - display: contents
+              img_cell:
+                - display: contents
+              icon:
+                - margin: 0
+                - margin-right: 0.3em
+                - width: 40px
+                - position: relative
+                - width: 30px
+                - color: darkslategray
+              name:
+                - font-size: 0.8em
+      - square: false
+        type: grid
+        columns: 5
+        cards:
+          - type: custom:button-card
+            entity: sensor.ajax_night_mode_state
+            icon: mdi:weather-night
+            show_name: false
+            state:
+              - value: Armed
+                color: orange
+              - value: ArmedWithErrors
+                color: orange
+              - value: Request
+                color: green
+                icon: mdi:power
+                styles:
+                  card:
+                    - animation: blink 1s ease infinite
+              - value: ArmAttempt
+                color: orange
+                icon: mdi:alert
+                styles:
+                  card:
+                    - animation: blink 1s ease infinite
+              - value: Disarmed
+                color: gray
+            tap_action:
+              action: call-service
+              service: switch.toggle
+              data:
+                entity_id: switch.ajax_night_mode
+            hold_action:
+              action: call-service
+              service: switch.toggle
+              data:
+                entity_id: switch.ajax_force_night_mode
+            styles:
+              card:
+                - background: none
+                - border: 0
+                - border-bottom: |
+                    [[[
+                      var x = (entity.state=='Armed') || (entity.state=='ArmedWithErrors');
+                      if (x) return '2px solid darkred';
+                    ]]]
+          - type: custom:button-card
+            entity: sensor.ajax_house_state
+            icon: mdi:home
+            show_name: false
+            state:
+              - value: Armed
+                color: DarkSlateblue
+              - value: ArmedWithErrors
+                color: DarkSlateblue
+              - value: Request
+                color: green
+                icon: mdi:power
+                styles:
+                  card:
+                    - animation: blink 1s ease infinite
+              - value: ArmAttempt
+                color: orange
+                icon: mdi:alert
+                styles:
+                  card:
+                    - animation: blink 1s ease infinite
+              - value: Disarmed
+                color: gray
+            tap_action:
+              action: call-service
+              service: switch.toggle
+              data:
+                entity_id: switch.ajax_house_arm
+            hold_action:
+              action: call-service
+              service: switch.toggle
+              data:
+                entity_id: switch.ajax_house_force_arm
+            styles:
+              card:
+                - background: none
+                - border: 0
+                - border-bottom: |
+                    [[[
+                      var x = (entity.state=='Armed') || (entity.state=='ArmedWithErrors');
+                      if (x) return '2px solid darkred';
+                    ]]]
+              icon:
+                - color: |
+                    [[[
+                      var x = (entity.state=='Armed') || (entity.state=='ArmedWithErrors');
+                      if (x) return 'DarkSlateblue'; else return 'gray';
+                    ]]]
+          - type: custom:button-card
+            entity: sensor.ajax_garage_state
+            icon: mdi:garage-variant
+            show_name: false
+            state:
+              - value: Armed
+                color: DarkSlateblue
+              - value: ArmedWithErrors
+                color: DarkSlateblue
+              - value: Request
+                color: green
+                icon: mdi:power
+                styles:
+                  card:
+                    - animation: blink 1s ease infinite
+              - value: ArmAttempt
+                color: orange
+                icon: mdi:alert
+                styles:
+                  card:
+                    - animation: blink 1s ease infinite
+              - value: Disarmed
+                color: gray
+            tap_action:
+              action: call-service
+              service: switch.toggle
+              data:
+                entity_id: switch.ajax_garage_arm
+            hold_action:
+              action: call-service
+              service: switch.toggle
+              data:
+                entity_id: switch.ajax_garage_force_arm
+            styles:
+              card:
+                - background: none
+                - border: 0
+                - border-bottom: |
+                    [[[
+                      var x = (entity.state=='Armed') || (entity.state=='ArmedWithErrors');
+                      if (x) return '2px solid darkred';
+                    ]]]
+          - type: custom:button-card
+            entity: sensor.ajax_sauna_state
+            icon: mdi:hot-tub
+            show_name: false
+            state:
+              - value: Armed
+                color: DarkSlateblue
+              - value: ArmedWithErrors
+                color: DarkSlateblue
+              - value: Request
+                color: green
+                icon: mdi:power
+                styles:
+                  card:
+                    - animation: blink 1s ease infinite
+              - value: ArmAttempt
+                color: orange
+                icon: mdi:alert
+                styles:
+                  card:
+                    - animation: blink 1s ease infinite
+              - value: Disarmed
+                color: gray
+            tap_action:
+              action: call-service
+              service: switch.toggle
+              data:
+                entity_id: switch.ajax_sauna_arm
+            hold_action:
+              action: call-service
+              service: switch.toggle
+              data:
+                entity_id: switch.ajax_sauna_force_arm
+            styles:
+              card:
+                - background: none
+                - border: 0
+                - border-bottom: |
+                    [[[
+                      var x = (entity.state=='Armed') || (entity.state=='ArmedWithErrors');
+                      if (x) return '2px solid darkred';
+                    ]]]
+          - type: custom:button-card
+            entity: sensor.ajax_yard_state
+            icon: mdi:grass
+            show_name: false
+            state:
+              - value: Armed
+                color: darkgreen
+              - value: ArmedWithErrors
+                color: darkgreen
+              - value: Request
+                color: green
+                icon: mdi:power
+                styles:
+                  card:
+                    - animation: blink 1s ease infinite
+              - value: ArmAttempt
+                color: orange
+                icon: mdi:alert
+                styles:
+                  card:
+                    - animation: blink 1s ease infinite
+              - value: Disarmed
+                color: gray
+            tap_action:
+              action: call-service
+              service: switch.toggle
+              data:
+                entity_id: switch.ajax_yard_arm
+            hold_action:
+              action: call-service
+              service: switch.toggle
+              data:
+                entity_id: switch.ajax_yard_force_arm
+            styles:
+              card:
+                - background: none
+                - border: 0
+                - border-bottom: |
+                    [[[
+                      var x = (entity.state=='Armed') || (entity.state=='ArmedWithErrors');
+                      if (x) return '2px solid darkred';
+                    ]]]
+      - type: custom:button-card
+        entity: sensor.ajax_hub_eventsecurity
+        show_name: false
+        show_icon: false
+        show_state: true
+        show_label: true
+        label: |
+          [[[
+            var x = states['sensor.ajax_hub_eventmalfunctions'].state;
+            if (x!='unknown') return "<br>"+x
+          ]]]
+        hold_action:
+          action: more-info
+          entity: sensor.ajax_hub_eventmalfunctions
+        styles:
+          card:
+            - background: none
+            - border: 0
+            - color: Gray
+            - padding-top: 0px
+          state:
+            - font-size: 0.9em
+          label:
+            - font-size: 0.8em
+            - color: DimGray

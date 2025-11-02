@@ -1,0 +1,28 @@
+arm_disarm:
+  name: Ajax Group ARM or DISARM
+  description: ARM or DISARM several groups
+  target:
+    entity:
+      integration: ajax_jeedom
+      domain: button
+  fields:
+    groups:
+      example: "1,3,2"
+      required: true
+      selector:
+        object:
+    command:
+      name: Command
+      required: true
+      selector:
+        select:
+          options:
+            - ARM
+            - DISARM
+    ignore_problems:
+      required: false
+      selector:
+        select:
+          options:
+            - "yes"
+            - "no"

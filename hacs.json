@@ -1,0 +1,12 @@
+{
+    "name": "Ajax Security via Jeedom",
+    "hacs": "0.2",
+    "render_readme": true,
+    "domains": [
+        "sensor",
+        "binary_sensor",
+        "switch",
+        "button"
+    ],
+    "homeassistant": "2025.1.0"
+}
