@@ -1,6 +1,6 @@
 # Ajax Security Card Example for Home Assistant 
 
-![image](https://github.com/bob-tm/ha_ajax_jeedom/blob/main/ui/card.jpg)
+![image](https://github.com/bob-tm/ha_ajax_security/blob/main/ui/card.jpg)
 
 In my example I have 4 different groups.
 - Arm/Disarm - global Hub control
@@ -116,7 +116,7 @@ My card uses
 - [Card Mod](https://github.com/thomasloven/lovelace-card-mod) to cahange animation params for Restriction Card
 
 # Examples
-There are [Full](https://github.com/bob-tm/ha_ajax_jeedom/blob/main/ui/ajax_example_full.yaml) and [Basic](https://github.com/bob-tm/ha_ajax_jeedom/blob/main/ui/ajax_example_basic.yaml) code examples.
+There are [Full](https://github.com/bob-tm/ha_ajax_security/blob/main/ui/ajax_example_full.yaml) and [Basic](https://github.com/bob-tm/ha_ajax_security/blob/main/ui/ajax_example_basic.yaml) code examples.
 
 Just add new card, choose manual and copy paste from files above. Then rename you sensors and it should work out of box.
 
