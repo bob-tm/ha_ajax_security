@@ -16,6 +16,7 @@ Technically it uses Ajax API via Jeedom cloud. Jeedom works like a proxy. All co
 
 # What is works
 - Arm, Force ARM, Disarm for HUB and Groups
+- Build in HA Action (service) to Arm / Disarm multiple Groups with one click
 - Panic and muteFiredecetcors buttons
 - Night Mode, Force Night Mode
 - Correct malfunctions messages
