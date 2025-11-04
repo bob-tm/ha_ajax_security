@@ -77,8 +77,8 @@ To Setup Home Assistant Integartion you need:
 
 # Updates
 It's better to disable everything
-![image](https://github.com/bob-tm/ha_ajax_security/blob/main/jeedom/update1.png)
-![image](https://github.com/bob-tm/ha_ajax_security/blob/main/jeedom/update2.png)
+![image](https://github.com/bob-tm/ha_ajax_security/blob/main/jeedom/updates1.png)
+![image](https://github.com/bob-tm/ha_ajax_security/blob/main/jeedom/updates2.png)
 
 
 
