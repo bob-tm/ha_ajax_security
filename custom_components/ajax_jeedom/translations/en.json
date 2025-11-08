@@ -16,9 +16,23 @@
                 "data": {
                     "base_url": "JeeDom Url",
                     "auth_token": "Ajax API Token",
-                    "panic_button": "Enable PANIC button"
+                    "panic_button": "Enable PANIC button",
+                    "replace_username": "Replace Ajax user name to HA user name in events",
+                    "apply_hub_state_to_groups": "Apply Hub State changes to All Groups (experemental)"
                 }
             }
         }
-   }
+    },
+
+    "options": {
+        "step": {
+            "init": {
+                "data": {
+                    "panic_button": "Enable PANIC button",
+                    "replace_username": "Replace Ajax user name to HA user name in events",
+                    "apply_hub_state_to_groups": "Apply Hub State changes to All Groups (experemental)"
+                }
+            }
+        }
+    }
 }

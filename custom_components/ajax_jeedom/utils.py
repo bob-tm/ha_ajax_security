@@ -1,3 +1,6 @@
 def strip_ip(url: str):
     """Strip IP/Hostname from URL"""
-    return url.split("/")[2].split(":")[0]
+    try:
+        return url.split("/")[2].split(":")[0]
+    except:
+        return url

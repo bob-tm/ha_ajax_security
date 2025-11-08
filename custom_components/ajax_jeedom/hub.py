@@ -1,44 +1,49 @@
+"""Hun Integration for Ajax Security"""
+
 from __future__ import annotations
 
-# In a real implementation, this would be in an external library that's on PyPI.
-# The PyPI package needs to be included in the `requirements` section of manifest.json
-# See https://developers.home-assistant.io/docs/creating_integration_manifest
-# for more information.
-# This dummy hub always returns 3 rollers.
 import asyncio
-import os
+from datetime import datetime, timedelta
 import json
+import os
 from pathlib import Path
+import time
 
+from homeassistant.components import mqtt
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import device_registry as dr
-from .const import CONF_AUTH_TOKEN, CONF_BASE_URL, CONF_PANIC_BUTTON, CONF_API_URL
-
-from homeassistant.components import mqtt
-from homeassistant.components.mqtt.models import ReceiveMessage
-
-from homeassistant.components.sensor import SensorDeviceClass
-
+from homeassistant.helpers.event import async_track_point_in_utc_time
 from homeassistant.helpers.storage import STORAGE_DIR
-from .JeedomAjaxApi import JeedomAjaxApi
-from .const import DOMAIN, LOGGER, PLATFORMS, SWITCH_ENABLED
-from .utils import strip_ip
-from .mqtt_raw_event_parser import (
-    parse_raw_message,
-    SensorNameFromLogToConfig,
-    HubStateToLowerCaseState,
-    AjaxHubEventSensors,
+from homeassistant.util import utcnow
+
+from .const import (
+    CONF_API_URL,
+    CONF_APPLY_HUB_STATE_TO_GROUPS,
+    CONF_AUTH_TOKEN,
+    CONF_BASE_URL,
+    CONF_PANIC_BUTTON,
+    CONF_REPLACE_USERNAME,
+    DOMAIN,
+    LOGGER,
+    PLATFORMS,
+    SWITCH_ENABLED,
 )
+from .JeedomAjaxApi import JeedomAjaxApi
 from .mqtt_raw_event_parser import (
-    STATE_ARMED,
-    STATE_DISARMED,
     STATE_ARMATTEMPT,
+    STATE_ARMED,
     STATE_ARMED_WITH_ERRORS,
+    STATE_DISARMED,
+    STATE_EXEC_CMD,
     STATE_HUB_CHECK_GROUPS,
     STATE_HUB_PARTIALLY_ARMED,
-    STATE_EXEC_CMD,
+    AjaxHubEventSensors,
+    HubStateToLowerCaseState,
+    SensorNameFromLogToConfig,
+    parse_raw_message,
 )
+from .utils import strip_ip
 
 CACHE_AJAX_REQUESTS = False
 #CACHE_AJAX_REQUESTS = True
@@ -48,11 +53,7 @@ async def ConfigFlowTestConnection(host, token):
     try:
         japi = JeedomAjaxApi(host.rstrip("\\"), CONF_API_URL, token)
         r = await japi.isOk()
-        if r == True:
-            return True
-        else:
-            return False
-
+        return r
     except:
         return False
 
@@ -62,17 +63,29 @@ class AjaxHub:
 
     def __init__(self, hass: HomeAssistant, entry_data, config_entry) -> None:
         self.disk_cache = CACHE_AJAX_REQUESTS
-        self._apikey = entry_data[CONF_AUTH_TOKEN]
-        self._host = entry_data[CONF_BASE_URL].rstrip("\\")
-        self._apiurl = CONF_API_URL
-        self._enable_panic_button = entry_data[CONF_PANIC_BUTTON]
+        self._apikey    = entry_data[CONF_AUTH_TOKEN]
+        self._host      = entry_data[CONF_BASE_URL].rstrip("\\")
+        self._apiurl    = CONF_API_URL
+
         self._hass = hass
         self._name = self._host
         self._id = self._host.lower()
         self.devices = {}
-        self.rooms = {}
-        self.groups = {}
-        self.hubs = {}
+        self.rooms   = {}
+        self.groups  = {}
+        self.hubs    = {}
+
+        self.enable_panic_button              = False
+        self.enable_ha_user_replace           = True
+        self.enable_apply_hub_state_to_groups = False
+        self.applyOptions(config_entry.options)
+
+        self.replace_api_addr_before_call = False
+        # debug feature to test bad url for testing
+        # self.replace_api_addr_before_call = 'https://google.com/sdf'
+
+        self._ha_lastaction_user = None
+        self._ha_lastaction_time = 0
 
         # patched Jeedom Ajax Plugin
         self.ajax_user_id = False  # user id for direct API call
@@ -87,6 +100,26 @@ class AjaxHub:
             + strip_ip(self._host.lower())
         )
         os.makedirs(self.cache_folder, exist_ok=True)
+
+    def applyOptions(self, options):
+        self.enable_panic_button              = options.get(CONF_PANIC_BUTTON,              self.enable_panic_button)
+        self.enable_ha_user_replace           = options.get(CONF_REPLACE_USERNAME,          self.enable_ha_user_replace)
+        self.enable_apply_hub_state_to_groups = options.get(CONF_APPLY_HUB_STATE_TO_GROUPS, self.enable_apply_hub_state_to_groups)
+
+    def setUserNameFromId(self, user_id):
+        persons = self._hass.states.all('person')
+        for p in persons:
+            if user_id==p.attributes['user_id']:
+                self._ha_lastaction_user = p.name
+                self._ha_lastaction_time = time.time()
+
+                return
+
+        self._ha_lastaction_user = None
+        self._ha_lastaction_time = 0
+
+    async def setContextFromLastCall(self, context):
+        await self._hass.async_add_executor_job(self.setUserNameFromId, context.user_id)
 
     def getCachedJsonFile(self, filename):
         if not self.disk_cache:
@@ -297,9 +330,28 @@ class AjaxHub:
             m = parse_raw_message(j)
             # self.ajax_user_id = m['user_id']
 
+            #if self.hub_id != m['hub_id']:
+            #    # skip messages for other hub
+            #    # LOGGER.debug(f"Skip message for other hub {self.hub_id}  {m['hub_id']}")
+            #    return
+
             if m["event"]:
+                LOGGER.debug(f"update: {json.dumps(m["event"])}")
+
                 if m["event"]["eventType"] == "SECURITY":
-                    pass
+                    if self.enable_ha_user_replace:
+                        # If Apply HA Multiuser Hack to event text. Replace Ajax UserName to HA User Name
+                        time_since_last_action = (time.time()-self._ha_lastaction_time)
+                        if time_since_last_action<7 and self._ha_lastaction_user:
+                            ajax_user_name = m['event']['sourceObj']
+                            replace_user_name = self._ha_lastaction_user
+                            LOGGER.info(f"{time_since_last_action} sec from last Action. AjaxUser->HaUser {ajax_user_name}->{replace_user_name}")
+                            for i, u in enumerate(m["updates"]):
+                                if u['name']=='eventSecurity':
+                                    m["updates"][i]['state']=u['state'].replace(m['event']['sourceObj'], replace_user_name)
+                                    break
+
+
                     # s=m['event']
                     # prefix   ='!! ' if s['arming_state'] == 'ArmAttepmt' else ''
                     # postfix  =f" | {s['malfunctions']}"  if s['malfunctions'] else ''
@@ -308,6 +360,7 @@ class AjaxHub:
             if m["updates"]:
                 for u in m["updates"]:
                     if u["id"] in self.devices:
+                        LOGGER.debug(f"update: {json.dumps(u)}")
                         ad = self.devices[u["id"]]
                         await ad.update_param_from_raw_api_mqtt_message(u)
                     else:
@@ -338,6 +391,8 @@ class AjaxHub:
             )
 
     async def Apply_HubState_ToGroups(self, hubState):
+        LOGGER.debug(f"Groups State changed to hubState: {hubState}")
+
         for id, d in self.devices.items():
             if d.devicetype == "GROUP":
                 v = d.get_sensor_value("state")
@@ -396,7 +451,7 @@ class AjaxDevice:
     details = False
 
     def __init__(
-        self, ha_Hub, name, parentHubId, parentHub, devicetype, index, config
+        self, ha_Hub: AjaxHub, name, parentHubId, parentHub, devicetype, index, config
     ) -> None:
         self.name = name
         self.ha_Hub = ha_Hub
@@ -413,6 +468,7 @@ class AjaxDevice:
         self.SensorsVisible = {}
         self.SensorsValues = {}
         self.sensor_name_callbacks = {}
+        self.last_arm_cmd = False
 
     def parse_sensor_value(self, sensor_name, value, update_type):
         try:
@@ -471,6 +527,8 @@ class AjaxDevice:
             return f"{path}/groups/{self.id}"
         elif self.devicetype == "DEVICE":
             return f"{path}/devices/{self.id}"
+        else:
+            return ''
 
     def Generate_MUTE_FIRE_DETECTORS_config(self):
         return {
@@ -602,12 +660,12 @@ class AjaxDevice:
                 # SWITCHED_ON, SWITCHED_OFF, OFF_TOO_LOW_VOLTAGE, OFF_HIGH_VOLTAGE, OFF_HIGH_CURRENT, OFF_SHORT_CIRCUIT, CONTACT_HANG, OFF_HIGH_TEMPERATURE
                 v = "SWITCHED_ON" in v
             elif self.devicetype == "HUB" and si["json_path"] == "state":
-                """
+                '''
                 test=[
                         'DISARMED', 'ARMED', 'NIGHT_MODE',
                         'ARMED_NIGHT_MODE_ON', 'ARMED_NIGHT_MODE_OFF', 'DISARMED_NIGHT_MODE_ON', 'DISARMED_NIGHT_MODE_OFF',
                         'PARTIALLY_ARMED_NIGHT_MODE_ON', 'PARTIALLY_ARMED_NIGHT_MODE_OFF']
-                """
+                '''
                 x = v.split("_NIGHT_MODE_")
                 night_mode_armed = False
                 hub_state = None
@@ -655,9 +713,16 @@ class AjaxDevice:
 
         # Parse HUB state update and apply it to ALL groups. Update mqtt message
         if u["type"] == "HUB" and u["name"] == "state":
-            if u["state"] in [0, 1]:
+            if (u["state"] in [0, 1]):
                 hubState = STATE_ARMED if u["state"] == 1 else STATE_DISARMED
+
+                if not self.ha_Hub.enable_apply_hub_state_to_groups:
+                    LOGGER.debug(f"Skip Hub State {hubState}. HUB.state Message")
+                    return
+
                 updateGroupsStateFromHubState = hubState
+                LOGGER.debug(f"Apply Hub State {updateGroupsStateFromHubState} to All Groups. HUB.state Message")
+
                 # State from UPDATE message overrides Extended status from SECURITY event
                 if (
                     self.SensorsValues["hub_state"] == STATE_ARMED_WITH_ERRORS
@@ -671,6 +736,7 @@ class AjaxDevice:
         elif u["type"] == "GROUP" and u["name"] == "state":
             # update group.armed sensor
             if self.update_sensor_value(sensor_name, u):
+                LOGGER.debug("Group state Updated")
                 await self.publish_updates(sensor_name)
 
             # update group.sensor. State from UPDATE message overrides Extended status from SECURITY event
@@ -680,22 +746,27 @@ class AjaxDevice:
             )
             if not skip_update:
                 if self.update_sensor_value("state", u):
+                    LOGGER.debug("Group state Updated")
                     await self.publish_updates("state")
 
             hubState = self.ha_Hub.Calc_HubState_FromGroups()
+            LOGGER.debug(f"Hub state calculated from groups: {hubState}")
 
         # Notify HUB to update hub_state sensor and verify PARTIALLY_ARMED state
         # this come from event mqtt message
         elif u["type"] == "SECURITY_EVENT_PARSED" and u["name"] == "hub_state":
             if u["state"] in [STATE_ARMED, STATE_DISARMED]:
                 updateGroupsStateFromHubState = u["state"]
+                LOGGER.debug(f"Apply Hub State {updateGroupsStateFromHubState} to All Groups. From Parsed Event")
             elif u["state"] == STATE_HUB_CHECK_GROUPS:
                 hubState = self.ha_Hub.Calc_HubState_FromGroups()
+                LOGGER.debug(f"Calculated Hub State {hubState} from Groups. From Parsed Event")
 
         if hubState or updateGroupsStateFromHubState:
             if hubState:
                 hub = self.parentHub if self.devicetype != "HUB" else self
                 hub.SensorsValues["hub_state"] = hubState
+                LOGGER.debug(f"Hub State changed to {hubState}")
                 await hub.publish_updates("hub_state")
 
             if updateGroupsStateFromHubState:
@@ -750,26 +821,62 @@ class AjaxDevice:
 
         return None
 
-    async def exec_command(self, cmd_name) -> None:
-        if (not self.ha_Hub._enable_panic_button) and (cmd_name == "PANIC"):
-            raise ServiceValidationError("Panic button is Disabled")
-        else:
-            if cmd_name in self.Actions:
-                cmd = self.Actions[cmd_name]
+    @callback
+    async def check_if_request_is_expired(self, *_: datetime) -> None:
+        if self.last_arm_cmd:
+            state_sensor = self.last_arm_cmd['state_sensor']
+            if self.SensorsValues[state_sensor]==STATE_EXEC_CMD:
+                prev_state = self.last_arm_cmd['prev_state']
+                LOGGER.info(f"No HUB Answer. State for {self.name} returned to {prev_state}")
+                self.SensorsValues[state_sensor] = prev_state
+                await self.publish_updates(state_sensor)
+                self.last_arm_cmd = False
 
-                # update state sensor for ARM/DISARM commands
-                state_sensor = self.get_state_sensor_for_command(cmd)
-                if state_sensor:
-                    self.SensorsValues[state_sensor] = STATE_EXEC_CMD
-                    await self.publish_updates(state_sensor)
+    async def exec_command(self, cmd_name, context=None) -> None:
+        if (not self.ha_Hub.enable_panic_button) and (cmd_name == "PANIC"):
+            raise ServiceValidationError("Panic button is Disabled in Settings")
 
-                r = await self.ha_Hub.ajax_api.exec_cmd(
-                    cmd["path"], cmd["data"], cmd["call_method"]
-                )
-                if r == False:
-                    raise ServiceValidationError(self.ha_Hub.ajax_api.last_exec_error)
+        if cmd_name in self.Actions:
+            cmd = self.Actions[cmd_name]
 
-                return r
+            await self.ha_Hub.setContextFromLastCall(context)
+
+            # update state sensor for ARM/DISARM commands
+            state_sensor = self.get_state_sensor_for_command(cmd)
+            if state_sensor:
+                self.last_arm_cmd = {
+                    'prev_state'    : self.SensorsValues[state_sensor],
+                    'state_sensor'  : state_sensor
+                }
+
+                self.SensorsValues[state_sensor] = STATE_EXEC_CMD
+                await self.publish_updates(state_sensor)
+
+                expiration_at = utcnow() + timedelta(seconds=10)
+                async_track_point_in_utc_time(self.ha_Hub._hass, self.check_if_request_is_expired, expiration_at)
+
+            if self.ha_Hub.replace_api_addr_before_call:
+                self.ha_Hub.ajax_api.adrss = self.ha_Hub.replace_api_addr_before_call
+
+            LOGGER.debug(f"ajax_api.exec_cmd: {json.dumps(cmd)}")
+
+            r = await self.ha_Hub.ajax_api.exec_cmd(cmd["path"], cmd["data"], cmd["call_method"])
+
+            LOGGER.debug(f"ajax_api.exec_cmd return {json.dumps(r)}, LastError: {self.ha_Hub.ajax_api.last_exec_error}")
+
+            # r can be ''
+            if r == False:
+                LOGGER.error(f"ajax_api.exec_cmd errors: {self.ha_Hub.ajax_api.last_exec_error}")
+                raise ServiceValidationError(self.ha_Hub.ajax_api.last_exec_error)
+
+            #if state_sensor:
+            #    if not await self.wait_for_request_response_message(state_sensor):
+            #        self.SensorsValues[state_sensor] = STATE_EXEC_CMD
+            #        await self.publish_updates(state_sensor)
+
+            return r
+
+        return None
 
     @property
     def online(self) -> bool:

@@ -1,13 +1,13 @@
 {
   "domain": "ajax_jeedom",
   "name": "Ajax Security via Jeedom",
-  "documentation": "https://github.com/bob-tm/ha_ajax_security",
+  "documentation": "https://github.com/bob-tm/ha_ajax_jeedom",
   "iot_class": "local_polling",
   "dependencies": ["mqtt"],
   "requirements": [
     "zeroconf"
   ],
-  "version": "0.2",
+  "version": "0.3",
   "config_flow": true,
   "integration_type": "hub",
   "codeowners": [

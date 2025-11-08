@@ -336,7 +336,7 @@ def parse_raw_message(m):
 				{'name':'eventCode', 		'state': event['eventCode']},
 				{'name':'eventText', 		'state': event['eventText']},
 				{'name':'eventTextShort', 	'state': message.strip()},
-				#{'name':'sourceObjectName',	'state': event['sourceObj']},
+				#{'name':'eventSourceObjectName',	'state': event['sourceObj']},
 				#{'name':'sourceObjectId',	'state': e['sourceObjectId']},
 				#{'name':'eventJson',		'state': event},
 		]

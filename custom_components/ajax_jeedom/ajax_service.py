@@ -19,13 +19,19 @@ class AjaxService:
         return result
 
     def getClassForCall(hass, call):
+        #sometimes it's array, sometimes it's string
         eid = call.data["entity_id"]
+        if not isinstance(eid, str):
+            eid = eid[0]
+
         entities = {}
         for platform in async_get_platforms(hass, DOMAIN):
             entities.update(platform.entities)
 
         if eid in entities:
             return entities[eid]
+
+        return None
 
     def getCmdForCall(call):
         c = call.data["command"]
@@ -36,10 +42,11 @@ class AjaxService:
 
         if c == "ARM":
             return "FORCE ARM" if ip else "ARM"
-        elif c == "DISARM":
+
+        if c == "DISARM":
             return c
-        else:
-            return None
+
+        return None
 
     async def handle_arm_disarm(hass, call):
         groups = AjaxService.getGroupsForCall(call)
@@ -56,4 +63,4 @@ class AjaxService:
                 if gid in hub.devices:
                     g = hub.devices[gid]
                     # print(gid, cmd, g)
-                    await g.exec_command(cmd)
+                    await g.exec_command(cmd, call.context)

@@ -42,12 +42,16 @@ class SensorBase(Entity):
     _attr_should_poll  = False
 
     def __init__(self, ad, sensor_name, platform):
+        hubName                 = ad.parentHub.name if ad.parentHub else ''
         self._ad                = ad
         self._is_binary         = platform=='binary_sensor'
         self.sensor_name        = sensor_name
         self._attr_unique_id    = f"{self._ad.id}_{self.sensor_name}"
+        #self._attr_unique_id    = f"{ad.parentHubId}.{ad.id}_{self.sensor_name}"
         self._attr_name         = self.sensor_name
         self.entity_id          = f"{platform}.{self._ad.id}_{self.sensor_name}"
+        #self.entity_id          = f"{platform}.{ad.name}_{self.sensor_name}"
+        #self.entity_id          = f"{platform}.{hubName}_{ad.name}_{self.sensor_name}"
 
         ad.register_sensor(self.sensor_name)
 
@@ -119,7 +123,7 @@ class SensorBase(Entity):
 
 class ButtonBase(SensorBase, ButtonEntity):
     async def async_press(self):
-        result = await self._ad.exec_command(self.sensor_name)
+        result = await self._ad.exec_command(self.sensor_name, self._context)
         return result
     @property
     def state(self):
@@ -145,8 +149,8 @@ class SwitchBase(SensorBase, SwitchEntity):
 
     async def async_turn_on(self, **kwargs: dict[str, Any]) -> None:
         cmd_on = self._ad.Switches[self.sensor_name]['on']
-        await self._ad.exec_command(cmd_on)
+        await self._ad.exec_command(cmd_on, self._context)
 
     async def async_turn_off(self, **kwargs: dict[str, Any]) -> None:
         cmd_off = self._ad.Switches[self.sensor_name]['off']
-        await self._ad.exec_command(cmd_off)
+        await self._ad.exec_command(cmd_off, self._context)

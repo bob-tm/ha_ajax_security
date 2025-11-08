@@ -1,29 +1,37 @@
-from homeassistant.helpers import config_validation as cv
-import voluptuous as vol
 from typing import Any
 
-from homeassistant import config_entries, exceptions
-from homeassistant.core import HomeAssistant
+import voluptuous as vol
 
+from homeassistant import config_entries, exceptions
+from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers import config_validation as cv
+
+from . import hub
 from .const import (
     CONF_AUTH_TOKEN,
     CONF_BASE_URL,
     CONF_PANIC_BUTTON,
+    CONF_REPLACE_USERNAME,
+    CONF_APPLY_HUB_STATE_TO_GROUPS,
     DOMAIN,
     LOGGER,
-    PLATFORMS,
 )
-
-from . import hub
 
 DATA_SCHEMA = vol.Schema({
     vol.Required(CONF_BASE_URL): str,
     vol.Required(CONF_AUTH_TOKEN, default=""): cv.string, # cv.matches_regex(r"^(oh)\.(.+)\.(.+)$"),
-    vol.Required(CONF_PANIC_BUTTON): bool,
+    vol.Required(CONF_PANIC_BUTTON, default=False): bool,
+    vol.Required(CONF_REPLACE_USERNAME, default=True): bool,
+    vol.Required(CONF_APPLY_HUB_STATE_TO_GROUPS, default=False): bool
     })
 
+options_schema = vol.Schema({
+    vol.Required(CONF_PANIC_BUTTON): bool,
+    vol.Required(CONF_REPLACE_USERNAME): bool,
+    vol.Required(CONF_APPLY_HUB_STATE_TO_GROUPS): bool
+})
 
-class JeedomFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
+class AjaxConfigFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
     """Config flow for Jeedom."""
 
     VERSION = 1
@@ -33,14 +41,25 @@ class JeedomFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
 
 
         errors = {}
-
-        #LOGGER.info(user_input)
+        LOGGER.info('async_step_user')
+        LOGGER.info(user_input)
 
         if user_input is not None:
             try:
                 info = await validate_input(self.hass, user_input)
+                #if info:
+                #return await self.async_step_options(user_input)
+                options = {
+                    CONF_PANIC_BUTTON               : user_input[CONF_PANIC_BUTTON],
+                    CONF_REPLACE_USERNAME           : user_input[CONF_REPLACE_USERNAME],
+                    CONF_APPLY_HUB_STATE_TO_GROUPS  : user_input[CONF_APPLY_HUB_STATE_TO_GROUPS]
+                }
 
-                return self.async_create_entry(title=info["title"], data=user_input)
+                user_input.pop(CONF_PANIC_BUTTON, None)
+                user_input.pop(CONF_REPLACE_USERNAME, None)
+                user_input.pop(CONF_APPLY_HUB_STATE_TO_GROUPS, None)
+
+                return self.async_create_entry(title=info["title"], data=user_input, options=options)
             except CannotConnect:
                 errors["base"] = "cannot_connect"
             except InvalidHost:
@@ -59,6 +78,26 @@ class JeedomFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             step_id="user",
             data_schema=DATA_SCHEMA,
             errors=errors
+        )
+
+    @staticmethod
+    @callback
+    def async_get_options_flow(config_entry: config_entries.ConfigEntry):
+        return OptionsFlowHandler()
+
+class OptionsFlowHandler(config_entries.OptionsFlow):
+
+    async def async_step_init(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.ConfigFlowResult:
+        if user_input is not None:
+            return self.async_create_entry(data=user_input)
+
+        return self.async_show_form(
+            step_id="init",
+            data_schema=self.add_suggested_values_to_schema(
+                options_schema, self.config_entry.options
+            ),
         )
 
 async def validate_input(hass: HomeAssistant, data: dict) -> dict[str, Any]:

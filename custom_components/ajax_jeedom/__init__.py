@@ -1,11 +1,13 @@
 from dataclasses import dataclass
+
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, SupportsResponse, callback
 from homeassistant.helpers.device_registry import DeviceEntry
+from homeassistant.helpers.event import async_track_time_interval
 
-from .hub import AjaxHub
-from .const import DOMAIN, LOGGER, PLATFORMS, STARTUP_MESSAGE
 from .ajax_service import AjaxService
+from .const import DOMAIN, LOGGER, PLATFORMS
+from .hub import AjaxHub
 
 
 def async_get_entities(hass: HomeAssistant):
@@ -17,7 +19,6 @@ def async_get_entities(hass: HomeAssistant):
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    LOGGER.info(STARTUP_MESSAGE)
     hass.data.setdefault(DOMAIN, {})
 
     h = AjaxHub(hass, entry.data, entry)
@@ -42,8 +43,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         supports_response=SupportsResponse.NONE,
     )
 
+    entry.async_on_unload(entry.add_update_listener(update_listener))
+
     return True
 
+async def update_listener(hass: HomeAssistant, entry: ConfigEntry):
+    hub=hass.data.setdefault(DOMAIN, {})[entry.entry_id]
+    hub.applyOptions(entry.options)
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""

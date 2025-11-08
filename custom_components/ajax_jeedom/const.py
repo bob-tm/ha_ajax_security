@@ -6,7 +6,6 @@ from logging import Logger, getLogger
 NAME = "Jeedom Ajax Bridge"
 DOMAIN = "ajax_jeedom"
 DOMAIN_DATA = f"{DOMAIN}_data"
-VERSION = "0.0.1"
 LOGGER: Logger = getLogger(__package__)
 
 # Platforms
@@ -21,16 +20,9 @@ Diagnostic    = ['event', 'eventTag', 'eventCode', 'eventTextShort', 'eventJson'
 
 SWITCH_ENABLED = ['Relay', 'WallSwitch', 'Socket']
 # Configuration and options
-CONF_BASE_URL = "base_url"
-CONF_AUTH_TOKEN = "auth_token"
-CONF_PANIC_BUTTON = "panic_button"
+CONF_BASE_URL           = "base_url"
+CONF_AUTH_TOKEN         = "auth_token"
+CONF_PANIC_BUTTON       = "panic_button"
+CONF_REPLACE_USERNAME   = 'replace_username'
+CONF_APPLY_HUB_STATE_TO_GROUPS = 'apply_hub_state_to_groups'
 CONF_API_URL = '/plugins/ajaxSystem/core/php/jeeAjaxSystem.php'
-
-
-STARTUP_MESSAGE = f"""
--------------------------------------------------------------------
-{NAME}
-Version: {VERSION}
-This is a custom integration!
--------------------------------------------------------------------
-"""
