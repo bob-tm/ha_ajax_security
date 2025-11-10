@@ -97,7 +97,7 @@ EnableSensorsByDeviceType=[
             "type"  : "GROUP",
             "params": [
                 ["armed",  "state"],
-                ["armed",  "state"]
+                ["state",  "state"]
             ]
         },
         {
