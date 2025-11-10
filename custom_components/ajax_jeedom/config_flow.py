@@ -113,6 +113,10 @@ async def validate_input(hass: HomeAssistant, data: dict) -> dict[str, Any]:
     if len(data[CONF_BASE_URL]) < 3:
         raise InvalidHost
 
+    # Test debug config
+    if (data[CONF_BASE_URL]=='test') and (data[CONF_AUTH_TOKEN]=='test'):
+        return {"title": 'Virtual HUB'}
+
     result = await hub.ConfigFlowTestConnection(data[CONF_BASE_URL], data[CONF_AUTH_TOKEN])
     if not result:
         # If there is an error, raise an exception to notify HA that there was a

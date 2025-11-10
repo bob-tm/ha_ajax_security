@@ -1,4 +1,5 @@
 from homeassistant.components.mqtt import async_get_platforms
+from homeassistant.core import HomeAssistant
 from .const import DOMAIN, LOGGER
 
 
@@ -48,7 +49,7 @@ class AjaxService:
 
         return None
 
-    async def handle_arm_disarm(hass, call):
+    async def handle_arm_disarm(hass: HomeAssistant, call):
         groups = AjaxService.getGroupsForCall(call)
         e = AjaxService.getClassForCall(hass, call)
         cmd = AjaxService.getCmdForCall(call)
@@ -56,11 +57,13 @@ class AjaxService:
         LOGGER.debug(f"RUN {cmd} {groups} {e}")
 
         if e and cmd:
-            hub = e.get_ajax_device().ha_Hub
+            ajaxDevice = e.get_ajax_device()
+            haHub      = ajaxDevice.ha_Hub
+            devices    = haHub.hubs[ajaxDevice.parentHubId]['devices']
 
             for id in groups:
                 gid = f"{id:08d}"
-                if gid in hub.devices:
-                    g = hub.devices[gid]
+                if gid in devices:
+                    g = devices[gid]
                     # print(gid, cmd, g)
                     await g.exec_command(cmd, call.context)

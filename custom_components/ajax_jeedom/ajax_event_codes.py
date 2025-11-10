@@ -217,7 +217,8 @@ ajax_event_codes_reversed = {
 	'M_12_46'	  : '%3$s: switched off, %1$s in %2$s',
 	'M_12_34'	  : '%3$s: switched on by arming, %1$s in %2$s',
 	'M_12_40'	  : '%3$s: switched off by disarming, %1$s in %2$s',
-	'M_ABS_0A'	  : '%3$s: %1$s in %2$s Temporarily deactivated'
+	'M_ABS_0A'	  : '%3$s: %1$s in %2$s Temporarily deactivated',
+    'M_ABS_0D'    : '%3$s: Notifications about the cover status are enabled, %1$s in %2$s'
 }
 
 

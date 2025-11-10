@@ -1,3 +1,6 @@
+'''Parse Ajax API events.'''
+from .ajax_event_codes import AjaxTranslateEvent
+
 HubArmTags 	  	= ['ArmAttempt', 'Arm', 'ArmWithMalfunctions', 'Disarm']
 GroupArmTags  	= ['GroupArmAttempt', 'GroupArm', 'GroupArmWithMalfunctions', 'GroupDisarm']
 NightModeArmTags= ['NightModeOnAttempt', 'NightModeOn', 'NightModeOnWithMalfunctions', 'NightModeOff']
@@ -44,8 +47,6 @@ HubStates = {
 	'PARTIALLY_ARMED' 	: STATE_HUB_PARTIALLY_ARMED,
 }
 
-from .ajax_event_codes import AjaxTranslateEvent
-
 AjaxLog2Config = {
 	'RELAY.voltage' 	: 'voltageMilliVolts',
 	'HUB.hubPowered'	: 'externallyPowered',
@@ -75,31 +76,29 @@ AjaxLog2ConfigUnknown = {
 AjaxHubEventSensors = ['event', 'eventTag', 'eventCode', 'eventText', 'eventTextShort', 'eventMalfunctions', 'eventSecurity']
 
 def HubStateToLowerCaseState(s):
+	'''Hub state in lower case.'''
 	return HubStates[s] if s in HubStates else s
 
 def SensorNameFromLogToConfig(log):
+	'''Get HA sensor name by event variable name.'''
 	fn = f"{log['type']}.{log['name']}"
 
 	if fn in AjaxLog2Config:
 		return AjaxLog2Config[fn]
-	elif log['name'] in AjaxLog2Config:
+	elif log['name'] in AjaxLog2Config:  # noqa: RET505
 		return AjaxLog2Config[log['name']]
 	else:
-	    return log['name']
+		return log['name']
 
 def HumanText(s):
+	'''Decode EventCode to user text.'''
 	if s in UserText:
 		return UserText[s]
 	else:
 		return s
 
-def ArmMode2Text(am):
-	#return am
-	am = am.replace('Group', '').replace('WithMalfunctions', '').replace('Attempt', '')
-	return HumanText(am)
-
-
 def DeviceMalfunctions(event):
+	'''Get list of problem devices.'''
 	result = ''
 	if 'additionalDataV2' in event:
 		DataV2 = event['additionalDataV2']
@@ -115,6 +114,7 @@ def DeviceMalfunctions(event):
 	return result
 
 def GroupsInfoV1(event):
+	'''Groups info version 1.'''
 	result = None
 	if 'additionalData' in event:
 		ad = event['additionalData']
@@ -132,6 +132,7 @@ def GroupsInfoV1(event):
 	return result
 
 def GroupsInfoV2(event):
+	'''Groups info version 2.'''
 	result = ''
 	groups = False
 	if 'additionalDataV2' in event:
@@ -152,6 +153,7 @@ def GroupsInfoV2(event):
 
 
 def get_arming_state(e):
+	'''Arm state for hub, group, night_mode.'''
 	result = {
 		'message'		: '',
 		'arming_state'	: None,
@@ -190,6 +192,7 @@ def get_arming_state(e):
 
 
 def add_update_param(update, id, sensor_name, value, title=None):
+	'''Add json to array.'''
 	j = {
 		'id': id,
 		'type'  : 'SECURITY_EVENT_PARSED',
@@ -203,6 +206,7 @@ def add_update_param(update, id, sensor_name, value, title=None):
 	update.append(j)
 
 def parse_raw_message(m):
+	'''Parse Event.'''
 	updates = []
 	event   = None
 	user_id = None
@@ -228,8 +232,8 @@ def parse_raw_message(m):
 
 		hub_id   = e['hubId']
 
-		eventTag 	= e['eventTag'] 	if 'eventTag' in e else ''
-		transition	= e['transition']	if 'transition' in e else ''
+		eventTag 	= e.get('eventTag',   '')
+		transition	= e.get('transition', '')
 
 		debugText = eventTag
 
@@ -316,7 +320,7 @@ def parse_raw_message(m):
 				realState = True
 				debugText = f"{prefix} switched on, {debugText}"
 
-			if realState != None:
+			if realState is not None:
 				kv = {
 							'id'	: e['sourceObjectId'],
 							'type'  : 'API_ARM_STATE_UPDATE',
