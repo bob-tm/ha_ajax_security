@@ -49,4 +49,7 @@ Technically it uses Ajax API via Jeedom cloud. Jeedom works like a proxy. All co
 1. Choose "Ajax Security via Jeedom" from the list and follow the config flow steps
 3. Check checkbox to Enable Panic Button calls. Without checkbox calls will raise internals exception. Better to disable it while testing.
 
+# Extending Manual
+[How to add unsupported devices](https://github.com/bob-tm/ha_ajax_security/blob/main/extending.md)
+
 
