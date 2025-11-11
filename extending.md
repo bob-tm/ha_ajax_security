@@ -2,7 +2,7 @@
 
 Integration parse device json at startup and than update it sensors via event messages.
 
-1. Device json file. It saved at \config\.storage\ajax_jeedom\jeedom_ext_link\user_id\hubs\hub_id\devices\device_id.json  
+1. Device json file. It saved at \config\\.storage\ajax_jeedom\jeedom_ext_link\user_id\hubs\hub_id\devices\device_id.json  
 2. All events are printed to log in debug mode.
 
 To add new features you can:
