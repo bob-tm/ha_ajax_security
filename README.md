@@ -17,13 +17,15 @@ Technically it uses Ajax API via Jeedom cloud. Jeedom works like a proxy. All co
 # What is works
 - Arm, Force ARM, Disarm for HUB and Groups
 - Build in HA Action (service) to Arm / Disarm multiple Groups with one click
+- Optional HA User name instead of Ajax User in notifications
 - Panic and muteFiredecetcors buttons
 - Night Mode, Force Night Mode
 - Correct malfunctions messages
+- Detailed state for Arming and Disarming (good for HA UI) 
 - Correct text Messages like in original APP
 - Realtime events
 - ALARM events
-- Sensors with Real time updates for Door sensors, Temperature, PowerFailure, Battery charge, Masking, Relay voltage, and more..
+- Sensors with Real time updates for Door sensors, Temperature, PowerFailure, Battery charge, Online, GSM INfo, Masking, Relay voltage, and more..
 - Relays, Sockets
 - Relatime Events
 - My [HA User Interface Card](https://github.com/bob-tm/ha_ajax_security/blob/main/ui/readme.md)
