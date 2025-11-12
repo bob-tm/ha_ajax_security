@@ -110,22 +110,51 @@ class AjaxHub:
         self.enable_ha_user_replace = options.get(CONF_REPLACE_USERNAME, self.enable_ha_user_replace)
         self.enable_apply_hub_state_to_groups = options.get(CONF_APPLY_HUB_STATE_TO_GROUPS, self.enable_apply_hub_state_to_groups)
 
-    def setUserNameFromId(self, user_id):
-        """Convert userid from context to person name."""
+    async def getUserNameByIdFromAuth(self, user_id):
+        '''Get UserName by user_id.'''
+        users = await self.hass.auth.async_get_users()
+        for user in users:
+            if user_id==user.id:
+                return user.name
+        return None
+
+    def getUserNameByIdFromPersonSync(self, user_id):
+        '''Get UserName by user_id from Person.'''
         persons = self.hass.states.all("person")
         for p in persons:
             if user_id == p.attributes["user_id"]:
-                self._ha_lastaction_user = p.name
-                self._ha_lastaction_time = time.time()
+                return p.name
+        return None
 
-                return
+    async def getUserNameByIdFromPerson(self, user_id):
+        '''Get UserName by user_id.'''
+        return await self.hass.async_add_executor_job(self.getUserNameByIdFromPersonSync, user_id)
+
+    async def getUserNameById(self, user_id):
+        user1 = await self.getUserNameByIdFromAuth(user_id)
+        user2 = await self.getUserNameByIdFromPerson(user_id)
+        #print(user1, user2)
+        LOGGER.debug(f"Detected {user1} and {user2}")
+        if user1: return user1
+        if user2: return user2
+
+        return None
+
+    async def setUserNameFromId(self, user_id):
+        """Convert userid from context to person name."""
+        user = await self.getUserNameById(user_id)
+        LOGGER.debug(f"Action by {user} with id {user_id}")
+        if user is not None:
+            self._ha_lastaction_user = user
+            self._ha_lastaction_time = time.time()
+            return
 
         self._ha_lastaction_user = None
         self._ha_lastaction_time = 0
 
     async def setContextFromLastCall(self, context):
         """Save user_id who make an arm/disarm action."""
-        await self.hass.async_add_executor_job(self.setUserNameFromId, context.user_id)
+        await self.setUserNameFromId(context.user_id)
 
     async def getCachedJsonFile(self, filename: str) -> dict | None:
         """Get Json From Disk."""
