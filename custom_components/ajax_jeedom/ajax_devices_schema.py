@@ -32,6 +32,7 @@ Diagnostic = [
     "buzzerState",
     "bypassMode",
     "isBypassed",
+    "alarmDuration"
 ]
 
 SWITCH_ENABLED = ["Relay", "WallSwitch", "Socket"]
@@ -48,8 +49,12 @@ Common = [
     "tampered",
     "externalPower",
     "externallyPowered",
+    "buzzerState",
+    "alarmDuration"
 ]
+
 Doors = ["reedClosed", "extraContactClosed"]
+
 Relays = [
     "switchState",
     "powerConsumedWattsPerHour",

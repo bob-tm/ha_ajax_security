@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timedelta
 import json
 import os
@@ -12,6 +13,7 @@ from homeassistant.components import mqtt
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.event import async_track_point_in_utc_time
 from homeassistant.helpers.storage import STORAGE_DIR
 from homeassistant.util import Callable, utcnow
@@ -50,13 +52,15 @@ from .mqtt_raw_event_parser import (
 from .utils import strip_ip
 
 CACHE_AJAX_REQUESTS = False
-#CACHE_AJAX_REQUESTS = True
+# CACHE_AJAX_REQUESTS = True
 
 
-async def ConfigFlowTestConnection(host, token):
+async def ConfigFlowTestConnection(hass: HomeAssistant, host, token):
     """Used on setup."""
     try:
-        japi = JeedomAjaxApi(host.rstrip("\\"), CONF_API_URL, token)
+        japi = JeedomAjaxApi(
+            async_get_clientsession(hass), host.rstrip("\\"), CONF_API_URL, token
+        )
         return await japi.isOk()
     except:  # noqa: E722
         return False
@@ -64,23 +68,24 @@ async def ConfigFlowTestConnection(host, token):
 
 class AjaxHub:
     """HA Main Hub."""
+
     manufacturer = "Ajax"
 
     def __init__(self, hass: HomeAssistant, entry_data, config_entry) -> None:
         """Init from config."""
         self.disk_cache = CACHE_AJAX_REQUESTS
-        self._apikey    = entry_data[CONF_AUTH_TOKEN]
-        self._host      = entry_data[CONF_BASE_URL].rstrip("\\")
-        self._apiurl    = CONF_API_URL
+        self._apikey = entry_data[CONF_AUTH_TOKEN]
+        self._host = entry_data[CONF_BASE_URL].rstrip("\\")
+        self._apiurl = CONF_API_URL
 
-        self.hass  = hass
-        self._name  = self._host
-        self._id    = self._host.lower()
-        self.hubs   = {}
+        self.hass = hass
+        self._name = self._host
+        self._id = self._host.lower()
+        self.hubs = {}
 
-        self.enable_panic_button                = False
-        self.enable_ha_user_replace             = True
-        self.enable_apply_hub_state_to_groups   = False
+        self.enable_panic_button = False
+        self.enable_ha_user_replace = True
+        self.enable_apply_hub_state_to_groups = False
         self.applyOptions(config_entry.options)
 
         self.replace_api_addr_before_call = False
@@ -106,20 +111,26 @@ class AjaxHub:
 
     def applyOptions(self, options):
         """Apply options at startup or after options flow."""
-        self.enable_panic_button = options.get(CONF_PANIC_BUTTON, self.enable_panic_button)
-        self.enable_ha_user_replace = options.get(CONF_REPLACE_USERNAME, self.enable_ha_user_replace)
-        self.enable_apply_hub_state_to_groups = options.get(CONF_APPLY_HUB_STATE_TO_GROUPS, self.enable_apply_hub_state_to_groups)
+        self.enable_panic_button = options.get(
+            CONF_PANIC_BUTTON, self.enable_panic_button
+        )
+        self.enable_ha_user_replace = options.get(
+            CONF_REPLACE_USERNAME, self.enable_ha_user_replace
+        )
+        self.enable_apply_hub_state_to_groups = options.get(
+            CONF_APPLY_HUB_STATE_TO_GROUPS, self.enable_apply_hub_state_to_groups
+        )
 
     async def getUserNameByIdFromAuth(self, user_id):
-        '''Get UserName by user_id.'''
+        """Get UserName by user_id."""
         users = await self.hass.auth.async_get_users()
         for user in users:
-            if user_id==user.id:
+            if user_id == user.id:
                 return user.name
         return None
 
     def getUserNameByIdFromPersonSync(self, user_id):
-        '''Get UserName by user_id from Person.'''
+        """Get UserName by user_id from Person."""
         persons = self.hass.states.all("person")
         for p in persons:
             if user_id == p.attributes["user_id"]:
@@ -127,16 +138,20 @@ class AjaxHub:
         return None
 
     async def getUserNameByIdFromPerson(self, user_id):
-        '''Get UserName by user_id.'''
-        return await self.hass.async_add_executor_job(self.getUserNameByIdFromPersonSync, user_id)
+        """Get UserName by user_id."""
+        return await self.hass.async_add_executor_job(
+            self.getUserNameByIdFromPersonSync, user_id
+        )
 
     async def getUserNameById(self, user_id):
         user1 = await self.getUserNameByIdFromAuth(user_id)
         user2 = await self.getUserNameByIdFromPerson(user_id)
-        #print(user1, user2)
+        # print(user1, user2)
         LOGGER.debug(f"Detected {user1} and {user2}")
-        if user1: return user1
-        if user2: return user2
+        if user1:
+            return user1
+        if user2:
+            return user2
 
         return None
 
@@ -158,6 +173,7 @@ class AjaxHub:
 
     async def getCachedJsonFile(self, filename: str) -> dict | None:
         """Get Json From Disk."""
+
         def getCachedJsonFileBlocking():
             if not self.disk_cache:
                 return False
@@ -169,7 +185,7 @@ class AjaxHub:
             with open(fn) as json_data:  # noqa: PTH123
                 return json.load(json_data)
 
-        return await self.hass.async_add_executor_job(getCachedJsonFileBlocking) # type: ignore
+        return await self.hass.async_add_executor_job(getCachedJsonFileBlocking)  # type: ignore
 
     def saveJsonToCache(self, filename, data):
         """Save JSON to disk."""
@@ -184,12 +200,18 @@ class AjaxHub:
         with open(fn, "w") as f:
             f.write(json_str)
 
-    async def GetFromCacheOrApi(self, path):
+    async def GetFromCacheOrApi(self, path, retry=False):
         """Check saved JSON or call API."""
         file_cache = f"{self.ajax_user_id}/{path}.json"
         r = await self.getCachedJsonFile(file_cache)
         if not r:
             r = await self.ajax_api.get_config_json(path)
+            if not r:
+                if retry:
+                    rt = 30
+                    LOGGER.debug(f"Retry for {path} in {rt} seconds")
+                    await asyncio.sleep(rt)
+                    r = await self.ajax_api.get_config_json(path)
             if r:
                 self.saveJsonToCache(file_cache, r)
 
@@ -222,7 +244,7 @@ class AjaxHub:
 
         hub_json["id"] = "test"
         hubId = "test"
-        self.hubs[hubId] = {"hubAjax": None, "devices": {}, "rooms":{} }
+        self.hubs[hubId] = {"hubAjax": None, "devices": {}, "rooms": {}}
         HubAjax = self.create_device(hubId, None, "HUB", {}, hub_json)
         self.hubs[hubId]["hubAjax"] = HubAjax
 
@@ -236,10 +258,17 @@ class AjaxHub:
             await self.LoadTestConfig()
             return
 
-        self.ajax_api = JeedomAjaxApi(self._host, self._apiurl, self._apikey)
+        self.ajax_api = JeedomAjaxApi(
+            async_get_clientsession(self.hass),
+            self._host,
+            self._apiurl,
+            self._apikey,
+        )
         self.ajax_user_id = await self.GetUserIdFromCacheOrApi()
         if not self.ajax_user_id:
-            LOGGER.error("Can not get Ajax UserId: Check if Patch is applied and ajax token is correct")
+            LOGGER.error(
+                "Can not get Ajax UserId: Check if Patch is applied and ajax token is correct"
+            )
             return
 
         # ajax={}
@@ -255,23 +284,37 @@ class AjaxHub:
                     HubAjax = self.create_device(hubId, None, "HUB", h, hub_info)
                     self.hubs[hubId]["hubAjax"] = HubAjax
 
-                    devices = await self.GetFromCacheOrApi(f"hubs/{hubId}/devices")
-                    if devices:
-                        for d in devices:
-                            device = await self.GetFromCacheOrApi(
-                                f"hubs/{hubId}/devices/{d['id']}"
-                            )
-                            self.create_device(hubId, HubAjax, "DEVICE", d, device)
-
                     groups = await self.GetFromCacheOrApi(f"hubs/{hubId}/groups")
                     if groups:
                         for g in groups:
                             self.create_device(hubId, HubAjax, "GROUP", g, {})
+                    else:
+                        LOGGER.error(f"No groups for Ajax Hub {hubId}")
 
-                    self.hubs[hubId]["rooms"] = await self.GetFromCacheOrApi(f"hubs/{hubId}/rooms")
+                    devices = await self.GetFromCacheOrApi(f"hubs/{hubId}/devices")
+                    if devices:
+                        for d in devices:
+                            LOGGER.debug(f"Geting Info for {d['id']}")
+                            if not CACHE_AJAX_REQUESTS:
+                                await asyncio.sleep(2)
+
+                            device = await self.GetFromCacheOrApi(
+                                f"hubs/{hubId}/devices/{d['id']}", True
+                            )
+                            try:
+                                self.create_device(hubId, HubAjax, "DEVICE", d, device)
+                            except Exception as e:
+                                LOGGER.error(
+                                    f"Error while adding device {d['id']}. {e}"
+                                )
+
+                    self.hubs[hubId]["rooms"] = await self.GetFromCacheOrApi(
+                        f"hubs/{hubId}/rooms"
+                    )
 
     async def Subscribe(self, hass):
         """Start receiving mqtt messages."""
+
         @callback
         async def message_received(msg):
             await self.parse_mqtt_message(msg.topic, msg.payload)
@@ -333,34 +376,34 @@ class AjaxHub:
                         ad.EnableSensor(p)
 
         for conf in EnableSensorsByModel:
-            if model in conf['model']:
-                for p in conf['params']:
+            if model in conf["model"]:
+                for p in conf["params"]:
                     ad.EnableSensor(p[0], p[1])
 
-        #if model in SWITCH_ENABLED:
+        # if model in SWITCH_ENABLED:
         #    ad.EnableSensor("realState", "switchState")
 
-        #if model in ["WallSwitch", "Socket"]:
+        # if model in ["WallSwitch", "Socket"]:
         #    ad.EnableSensor("powerWtH", "powerConsumedWattsPerHour")
         #    ad.EnableSensor("currentMA", "currentMilliAmpers")
         #    ad.EnableSensor("voltage", "voltageVolts")
 
-        #if model in ["Transmitter"]:
+        # if model in ["Transmitter"]:
         #    ad.EnableSensor("externalContactOK", "externalContactTriggered")
         #    ad.EnableSensor("isBypassed", "")
         #    ad.EnableSensor("bypassMode", "bypassState")
         #    # ENGINEER_BYPASS_ACTIVE, TAMPER_BYPASS_ACTIVE, AUTO_BYPASSED_BY_ALARMS_COUNT, AUTO_BYPASSED_AS_NOT_RESTORED, ONETIME_FULL_BYPASS_ENABLED, ONETIME_TAMPER_BYPASS_ENABLED
 
         for conf in EnableSensorsByDeviceType:
-            if devicetype in conf['type']:
-                for p in conf['params']:
+            if devicetype in conf["type"]:
+                for p in conf["params"]:
                     ad.EnableSensor(p[0], p[1])
 
-        #if devicetype == "GROUP":
+        # if devicetype == "GROUP":
         #    ad.EnableSensor("armed", "state")
         #    ad.EnableSensor("state", "state")
 
-        #if devicetype == "HUB":
+        # if devicetype == "HUB":
         #    ad.EnableSensor("batteryCharge", "battery::chargeLevelPercentage")
         #    ad.EnableSensor("wifi_level", "wifi::signalLevel")
         #    ad.EnableSensor("gsmNetworkStatus", "gsm::networkStatus")
@@ -443,10 +486,12 @@ class AjaxHub:
             if topic.startswith("jeedom/raw/event"):
                 await self.on_raw_event(payload)
         except:
-            LOGGER.error(f"Exception in parse_mqtt_message: topic {topic} and payload {payload}")
+            LOGGER.error(
+                f"Exception in parse_mqtt_message: topic {topic} and payload {payload}"
+            )
 
     async def Apply_HubState_ToGroups(self, hub, hubState):
-        '''Calculate group states from Hub state.'''
+        """Calculate group states from Hub state."""
 
         LOGGER.debug(f"Groups State changed to hubState: {hubState}")
 
@@ -467,7 +512,7 @@ class AjaxHub:
                 await d.publish_updates("armed")
 
     def Calc_HubState_FromGroups(self, hub):
-        '''Calc hub state from groups. Return False | STATE_ARMED | STATE_DISARMED | STATE_HUB_PARTIALLY_ARMED.'''
+        """Calc hub state from groups. Return False | STATE_ARMED | STATE_DISARMED | STATE_HUB_PARTIALLY_ARMED."""
 
         armed = 0
         total = 0
@@ -480,8 +525,10 @@ class AjaxHub:
                     armed = armed + 1
 
         if total > 0:
-            if armed == total:  return STATE_ARMED     # noqa: E701
-            if armed == 0:      return STATE_DISARMED  # noqa: E701
+            if armed == total:
+                return STATE_ARMED  # noqa: E701
+            if armed == 0:
+                return STATE_DISARMED  # noqa: E701
 
             return STATE_HUB_PARTIALLY_ARMED
 
@@ -489,11 +536,14 @@ class AjaxHub:
 
 
 class AjaxDevice:
-    '''Class for Ajax Device.'''
+    """Class for Ajax Device."""
+
     details = False
 
-    def __init__(self, ha_Hub: AjaxHub, name, parentHubId, parentHub, devicetype, index, config)->None:
-        '''Init Ajax Device for parentHub.'''
+    def __init__(
+        self, ha_Hub: AjaxHub, name, parentHubId, parentHub, devicetype, index, config
+    ) -> None:
+        """Init Ajax Device for parentHub."""
 
         self.name = name
         self.ha_Hub = ha_Hub
@@ -513,7 +563,7 @@ class AjaxDevice:
         self.last_arm_cmd = None
 
     def parse_sensor_value(self, sensor_name, value, update_type):
-        '''Parse sensor value from mqtt message.'''
+        """Parse sensor value from mqtt message."""
 
         try:
             if update_type == "HUB":
@@ -541,7 +591,7 @@ class AjaxDevice:
         return value
 
     def update_sensor_value(self, sensor_name, update):
-        '''Check, Parse and update sensor from mqtt message.'''
+        """Check, Parse and update sensor from mqtt message."""
 
         if sensor_name in self.SensorsVisible:
             value = self.parse_sensor_value(
@@ -553,7 +603,7 @@ class AjaxDevice:
             return False
 
     def get_path_for_actions(self):
-        '''Generate command Ajax API path by devicetype.'''
+        """Generate command Ajax API path by devicetype."""
 
         path = f"/user/{self.ha_Hub.ajax_user_id}/hubs/{self.parentHubId}"
 
@@ -567,7 +617,7 @@ class AjaxDevice:
             return ""
 
     def Generate_MUTE_FIRE_DETECTORS_config(self):
-        '''Ajax API params for Mute.'''
+        """Ajax API params for Mute."""
         return {
             "path": self.get_path_for_actions() + "/commands/muteFireDetectors",
             "data": {"muteType": "ALL_FIRE_DETECTORS"},
@@ -575,7 +625,7 @@ class AjaxDevice:
         }
 
     def Generate_PANIC_config(self):
-        '''Ajax API params for Panic.'''
+        """Ajax API params for Panic."""
         return {
             "path": self.get_path_for_actions() + "/commands/panic",
             "data": {
@@ -591,7 +641,7 @@ class AjaxDevice:
         }
 
     def Generate_ARM_config(self, command, ignoreProblems):
-        '''Ajax API params for Arm/Disarm.'''
+        """Ajax API params for Arm/Disarm."""
         return {
             "path": self.get_path_for_actions() + "/commands/arming",
             "data": {"command": command, "ignoreProblems": ignoreProblems},
@@ -599,7 +649,7 @@ class AjaxDevice:
         }
 
     def Generate_Device_config(self, command):
-        '''Ajax API params for Device.'''
+        """Ajax API params for Device."""
         # CONNECTION_TEST_START, CONNECTION_TEST_STOP,
         # DETECTION_TEST_START, DETECTION_TEST_STOP,
         # MUTE,
@@ -626,7 +676,7 @@ class AjaxDevice:
         }
 
     def RegisterActions(self):
-        '''Add buttons and switches to HA Device.'''
+        """Add buttons and switches to HA Device."""
 
         if self.devicetype in ["HUB", "GROUP"]:
             self.RegisterAction("ARM", self.Generate_ARM_config("ARM", False))
@@ -637,13 +687,29 @@ class AjaxDevice:
                 self.RegisterSwitch("Force Arm", "FORCE ARM", "DISARM", "armed")
 
             if self.devicetype == "HUB":
-                self.RegisterAction("NIGHT_MODE_ON",        self.Generate_ARM_config("NIGHT_MODE_ON",  False))
-                self.RegisterAction("FORCE_NIGHT_MODE_ON",  self.Generate_ARM_config("NIGHT_MODE_ON",  True))
-                self.RegisterAction("NIGHT_MODE_OFF",       self.Generate_ARM_config("NIGHT_MODE_OFF", True))
-                self.RegisterSwitch("Night Mode",       "NIGHT_MODE_ON",        "NIGHT_MODE_OFF", "night_mode_armed")
-                self.RegisterSwitch("Force Night Mode", "FORCE_NIGHT_MODE_ON",  "NIGHT_MODE_OFF", "night_mode_armed")
+                self.RegisterAction(
+                    "NIGHT_MODE_ON", self.Generate_ARM_config("NIGHT_MODE_ON", False)
+                )
+                self.RegisterAction(
+                    "FORCE_NIGHT_MODE_ON",
+                    self.Generate_ARM_config("NIGHT_MODE_ON", True),
+                )
+                self.RegisterAction(
+                    "NIGHT_MODE_OFF", self.Generate_ARM_config("NIGHT_MODE_OFF", True)
+                )
+                self.RegisterSwitch(
+                    "Night Mode", "NIGHT_MODE_ON", "NIGHT_MODE_OFF", "night_mode_armed"
+                )
+                self.RegisterSwitch(
+                    "Force Night Mode",
+                    "FORCE_NIGHT_MODE_ON",
+                    "NIGHT_MODE_OFF",
+                    "night_mode_armed",
+                )
 
-                self.RegisterAction("muteFireDetectors", self.Generate_MUTE_FIRE_DETECTORS_config())
+                self.RegisterAction(
+                    "muteFireDetectors", self.Generate_MUTE_FIRE_DETECTORS_config()
+                )
                 self.RegisterAction("PANIC", self.Generate_PANIC_config())
         elif self.devicetype in ["DEVICE"]:
             if self.config["deviceType"] in SWITCH_ENABLED:
@@ -656,21 +722,21 @@ class AjaxDevice:
                 self.RegisterSwitch("Enable", "SWITCH_ON", "SWITCH_OFF", "realState")
 
     def RegisterSwitch(self, name, on, off, state):
-        '''Add switch to internal array.'''
+        """Add switch to internal array."""
         self.Switches[name] = {"on": on, "off": off, "state_sensor_name": state}
 
     def RegisterAction(self, name, command):
-        '''Add button to internal array.'''
+        """Add button to internal array."""
         self.Actions[name] = command
 
     def AddVirtualSensors(self, sensors):
-        '''Add sesnor that do not present in JSON config.'''
+        """Add sesnor that do not present in JSON config."""
         for s in sensors:
             self.SensorsVisible[s] = {"json_path": None}
             self.SensorsValues[s] = None
 
     def ValueFromJson(self, json_path):
-        '''Parse JSON config data to HA sensor value.'''
+        """Parse JSON config data to HA sensor value."""
 
         if json_path is None:
             return None
@@ -686,7 +752,7 @@ class AjaxDevice:
         return value
 
     def UpdateSensorFromJson(self, sensor_name):
-        '''Convert JSON config data to HA sensor value.'''
+        """Convert JSON config data to HA sensor value."""
         si = self.SensorsVisible[sensor_name]
 
         # sensors not present in json config, only updated by mqtt messages
@@ -702,7 +768,6 @@ class AjaxDevice:
                 # SWITCHED_ON, SWITCHED_OFF, OFF_TOO_LOW_VOLTAGE, OFF_HIGH_VOLTAGE, OFF_HIGH_CURRENT, OFF_SHORT_CIRCUIT, CONTACT_HANG, OFF_HIGH_TEMPERATURE
                 v = "SWITCHED_ON" in v
             elif self.devicetype == "HUB" and si["json_path"] == "state":
-
                 # test=[
                 #        'DISARMED', 'ARMED', 'NIGHT_MODE',
                 #        'ARMED_NIGHT_MODE_ON', 'ARMED_NIGHT_MODE_OFF', 'DISARMED_NIGHT_MODE_ON', 'DISARMED_NIGHT_MODE_OFF',
@@ -736,16 +801,16 @@ class AjaxDevice:
             self.SensorsValues[sensor_name] = self.config[sensor_name]
 
     def EnableSensor(self, sensor_name, json_path=None):
-        '''Add sensor from JSON to HA.'''
+        """Add sensor from JSON to HA."""
         self.SensorsVisible[sensor_name] = {"json_path": json_path}
         self.UpdateSensorFromJson(sensor_name)
 
     def register_sensor(self, sensor_name):
-        '''Create set for callbacks.'''
+        """Create set for callbacks."""
         self.sensor_name_callbacks[sensor_name] = set()
 
     async def update_hub_and_group_states(self, sensor_name, hub, u):
-        '''Parse HUB and GROUP states. if Return  True - do not continue.'''
+        """Parse HUB and GROUP states. if Return  True - do not continue."""
         hubState = False
         updateGroupsStateFromHubState = False
 
@@ -823,7 +888,7 @@ class AjaxDevice:
         return False
 
     async def update_param_from_raw_api_mqtt_message(self, hub, u):
-        '''Parse value and update HA sensor.'''
+        """Parse value and update HA sensor."""
         sensor_name = SensorNameFromLogToConfig(u)
 
         # unsupported sesnor
@@ -849,7 +914,7 @@ class AjaxDevice:
             LOGGER.error(t)
 
     def get_sensor_value(self, sensor_name):
-        '''Get value.'''
+        """Get value."""
         if sensor_name in self.SensorsValues:
             return self.SensorsValues[sensor_name]
 
@@ -859,16 +924,16 @@ class AjaxDevice:
         return None
 
     def get_switch_is_on(self, sensor_name):
-        '''Is switch is on.'''
+        """Is switch is on."""
         sw = self.Switches[sensor_name]
         return self.SensorsValues[sw["state_sensor_name"]]
 
     def register_callback(self, sensor_name, call_back: Callable[[], None]) -> None:
-        '''Callback add.'''
+        """Callback add."""
         self.sensor_name_callbacks[sensor_name].add(call_back)
 
     def remove_callback(self, sensor_name, call_back: Callable[[], None]) -> None:
-        '''Callback remove.'''
+        """Callback remove."""
         self.sensor_name_callbacks[sensor_name].discard(call_back)
 
     # notified of any state changeds for the relevant device.
@@ -878,7 +943,7 @@ class AjaxDevice:
             call_back()
 
     def get_state_sensor_for_command(self, cmd):
-        '''Return None | state | hub_state | night_mode_state.'''
+        """Return None | state | hub_state | night_mode_state."""
         if "command" in cmd["data"]:
             command = cmd["data"]["command"]
 
@@ -893,7 +958,7 @@ class AjaxDevice:
         return None
 
     async def check_if_request_is_expired(self, *_: datetime) -> None:
-        '''Ajax API does not send any return if ARM already Armed group or Hub. Check such case here.'''
+        """Ajax API does not send any return if ARM already Armed group or Hub. Check such case here."""
         if self.last_arm_cmd:
             state_sensor = self.last_arm_cmd["state_sensor"]
             if self.SensorsValues[state_sensor] == STATE_EXEC_CMD:
@@ -906,7 +971,7 @@ class AjaxDevice:
                 self.last_arm_cmd = None
 
     async def exec_command(self, cmd_name, context=None) -> None:
-        '''Run AJAX Api command.'''
+        """Run AJAX Api command."""
         if (not self.ha_Hub.enable_panic_button) and (cmd_name == "PANIC"):
             raise ServiceValidationError("Panic button is Disabled in Settings")
 
@@ -919,7 +984,7 @@ class AjaxDevice:
             state_sensor = self.get_state_sensor_for_command(cmd)
             if state_sensor:
                 self.last_arm_cmd = {
-                    "prev_state"  : self.SensorsValues[state_sensor],
+                    "prev_state": self.SensorsValues[state_sensor],
                     "state_sensor": state_sensor,
                 }
 
@@ -956,7 +1021,7 @@ class AjaxDevice:
         return None
 
     async def UpdateOnlineStatus(self):
-        '''Update All Device sensors available status.'''
+        """Update All Device sensors available status."""
         t = f"{self.name} online status is {self.online}"
         LOGGER.debug(t)
 
@@ -969,7 +1034,7 @@ class AjaxDevice:
 
     @property
     def online(self) -> bool:
-        '''AjaxDevice is online.'''
+        """AjaxDevice is online."""
         if "online" in self.SensorsValues:
             return self.SensorsValues["online"]
         else:

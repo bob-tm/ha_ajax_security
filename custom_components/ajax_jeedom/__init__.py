@@ -1,5 +1,5 @@
 '''Init.'''
-from homeassistant.config_entries import ConfigEntry
+from homeassistant.config_entries import ConfigEntry, ConfigEntryNotReady
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant, SupportsResponse
 
@@ -16,6 +16,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     # Load Ajax Devices
     await h.LoadAjaxDevices()
+    if not h.hubs:
+        error = h.ajax_api.last_exec_error or "Jeedom did not return any hubs"
+        raise ConfigEntryNotReady(error)
 
     # Add Sensors to Home Assistant
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
