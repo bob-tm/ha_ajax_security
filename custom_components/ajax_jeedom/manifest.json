@@ -7,7 +7,7 @@
   "requirements": [
     "zeroconf"
   ],
-  "version": "0.4",
+  "version": "0.5",
   "config_flow": true,
   "integration_type": "hub",
   "codeowners": [

@@ -1,5 +1,6 @@
 import json
 import urllib.parse
+
 import aiohttp
 
 quoteurl = urllib.parse.quote
@@ -11,7 +12,8 @@ quoteurl = urllib.parse.quote
 class JeedomAjaxApi:
     last_exec_error = ""
 
-    def __init__(self, adrss, url, apiKey):
+    def __init__(self, session, adrss, url, apiKey):
+        self.session = session
         self.adrss = adrss + url
         self.apiKey = apiKey
         self.userId = False
@@ -62,16 +64,19 @@ class JeedomAjaxApi:
         params["apikey"] = self.apiKey
         data = json.dumps(params)
 
-        async with aiohttp.ClientSession() as session:
-            try:
-                async with session.post(self.adrss, data=data, timeout=10) as response:
-                    if response.status == 200:
-                        return await response.json()
-                    else:
-                        self.last_exec_error = f"Jeedom return {response.status}"
+        try:
+            async with self.session.post(
+                self.adrss,
+                data=data,
+                timeout=aiohttp.ClientTimeout(total=30),
+            ) as response:
+                if response.status == 200:
+                    return await response.json()
 
+                self.last_exec_error = f"Jeedom returned HTTP {response.status}"
+        except TimeoutError:
+            self.last_exec_error = "Timed out waiting for Jeedom API response"
+        except aiohttp.ClientError as err:
+            self.last_exec_error = f"aiohttp: {err}"
 
-            except aiohttp.ClientError as e:
-                text = str(e)
-                self.last_exec_error = f"aiohttp: {text}"
-                return None
+        return None
