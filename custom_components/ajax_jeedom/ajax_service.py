@@ -1,4 +1,4 @@
-from homeassistant.components.mqtt import async_get_platforms
+from homeassistant.helpers.entity_platform import async_get_platforms
 from homeassistant.core import HomeAssistant
 from .const import DOMAIN, LOGGER
 
