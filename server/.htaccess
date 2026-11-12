@@ -1,0 +1,8 @@
+RewriteEngine On
+
+RewriteRule \.log$ - [F,END,NC]
+
+RewriteRule ^(?:lib|tests|\.git)(?:/|$) - [F,END]
+RewriteRule ^(?:config(?:\.example)?\.php|install\.sh|README\.md|\.env|\.gitignore)$ - [F,END]
+RewriteRule ^plugins/ajaxSystem/core/php/jeeAjaxSystem\.php$ callback.php [END]
+RewriteRule ^$ callback.php [END]
