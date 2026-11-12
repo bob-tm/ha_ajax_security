@@ -21,4 +21,9 @@ if [ ! -e config.php ]; then
 else
     echo 'Kept your existing config.php.'
 fi
+touch bridge-debug.log
+if ! chgrp www-data bridge-debug.log; then
+    echo 'Warning: could not set the log group to www-data. Give your PHP service write access manually.' >&2
+fi
+chmod 660 bridge-debug.log
 echo 'Installed. See README.md for Apache and Home Assistant setup.'

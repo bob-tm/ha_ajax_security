@@ -157,18 +157,27 @@ These are top-level settings, alongside `callback_token` and `mqtt`. Older
 configuration files are preserved by the installer, so add the settings manually
 when updating. Debug logging is disabled by default.
 
-The PHP service needs write permission for the log file (or its containing folder
-when creating it). Follow requests with:
+The installer creates `bridge-debug.log`, attempts to set its group to `www-data`
+without sudo, and sets mode `660`. If group assignment fails or PHP runs under a
+different group, give that PHP service write access manually. Existing log contents
+are preserved during updates. Follow requests with:
 
 ```sh
 tail -f bridge-debug.log
 ```
 
-Each line is JSON with a timestamp and request ID. Logs include callback receipt,
-authentication result, event count, payload size, MQTT publication, HTTP status,
-and elapsed time. Credentials and callback tokens are excluded. Event payloads
-are excluded unless `debug_events` is enabled.
-MQTT failures include a reason such as broker rejection or a connection timeout.
+Each callback produces one JSON log line, starting with the MQTT result and,
+when `debug_events` is enabled, the event data:
+
+```json
+{"mqtt":"ok","data":[{"id":"device","updates":{}}],"time":"2026-01-01T12:00:00+00:00","status":200,"result":"Event forwarded.","duration_ms":12}
+```
+
+Failed delivery uses `"mqtt":"error"` and includes the failure reason in `error`.
+Rejected requests also use `"mqtt":"error"`; their `status` and `result` explain
+why publishing was not attempted. Only authenticated event data can be logged.
+Credentials and the callback envelope's API key are excluded. There are no separate
+receipt, authentication, or publication log lines.
 
 Set `debug_log` to an absolute path outside the web folder if preferred, or to
 `''` to use the standard PHP error log. The included `.htaccess` blocks HTTP access
