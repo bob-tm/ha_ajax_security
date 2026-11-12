@@ -70,7 +70,7 @@ class MarketApi:
         except HomeAssistantError:
             self._log_error_response(method, path, status, response_text, data, token)
             raise
-        if isinstance(result, str):
+        if isinstance(result, str) and result != "":
             try:
                 result = json.loads(result)
             except ValueError as err:
