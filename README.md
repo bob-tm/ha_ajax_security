@@ -53,3 +53,37 @@ Technically it uses Ajax API via Jeedom cloud. Jeedom works like a proxy. All co
 [How to add unsupported devices](https://github.com/bob-tm/ha_ajax_security/blob/main/extending.md)
 
 
+
+## Outgoing requests through Jeedom Market
+
+After restarting Home Assistant, use Reconfigure on the existing integration to
+choose Installed Jeedom or Jeedom Market cloud. Existing entries keep using
+installed Jeedom until reconfigured. MQTT reception remains on `jeedom/#`.
+
+Market mode requires the cloud gateway authorization value (the SHA-512 of
+`lowercase_market_username:SHA1(market_password)`, not the local plugin API key),
+the external Jeedom base URL as Callback URL, and the Ajax System plugin API
+key used to authenticate callbacks. Enter Ajax credentials to create a session;
+the Ajax login and password are not stored. Session tokens are stored under
+Home Assistant `.storage`; rejected authentication starts a reauthentication flow.
+Do not share a refresh token with the installed Jeedom plugin.
+
+The cloud gateway controls callback registration; verify incoming events still
+arrive after signing in. Live gateway behavior has not been verified by unit tests.
+
+## Local development API cache
+
+Create `ajax_jeedom_dev.json` in the Home Assistant configuration directory:
+
+```json
+{
+  "cache_api_requests": true
+}
+```
+
+Reload the integration after changing the file. When enabled, existing JSON
+responses in `.storage/ajax_jeedom/` are reused and per-device startup delays are
+skipped. Missing responses are fetched from the API and saved as before. Commands
+and event delivery are unaffected. Delete the file or set the value to `false`
+to fetch fresh data. A missing or invalid file disables the development cache.
+Keep this machine-specific file out of Git and production deployments.

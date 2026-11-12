@@ -35,6 +35,7 @@ from .const import (
     DOMAIN,
     LOGGER,
 )
+from .dev_config import DEV_CONFIG_FILE, cache_api_requests_enabled
 from .JeedomAjaxApi import JeedomAjaxApi
 from .market_api import MarketApi
 from .mqtt_raw_event_parser import (
@@ -52,8 +53,6 @@ from .mqtt_raw_event_parser import (
 )
 from .utils import strip_ip
 
-CACHE_AJAX_REQUESTS = False
-# CACHE_AJAX_REQUESTS = True
 
 
 async def ConfigFlowTestConnection(hass: HomeAssistant, host, token):
@@ -74,7 +73,7 @@ class AjaxHub:
 
     def __init__(self, hass: HomeAssistant, entry_data, config_entry) -> None:
         """Init from config."""
-        self.disk_cache = CACHE_AJAX_REQUESTS
+        self.disk_cache = False
         self._apikey = entry_data[CONF_AUTH_TOKEN]
         self._host = entry_data[CONF_BASE_URL].rstrip("\\")
         self._apiurl = CONF_API_URL
@@ -255,6 +254,9 @@ class AjaxHub:
 
     async def LoadAjaxDevices(self, progress=None):
         """Create API and Load main config."""
+        self.disk_cache = await self.hass.async_add_executor_job(
+            cache_api_requests_enabled, self.hass.config.path(DEV_CONFIG_FILE)
+        )
         if (self._host == "test") and (self._apikey == "test"):
             await self.LoadTestConfig()
             return
@@ -304,7 +306,7 @@ class AjaxHub:
                                 name = d.get("deviceName", d["id"])
                                 progress(f"Хаб {hub_info['name']}: читаем устройство {index} из {len(devices)} — {name}")
                             LOGGER.debug(f"Geting Info for {d['id']}")
-                            if not CACHE_AJAX_REQUESTS:
+                            if not self.disk_cache:
                                 await asyncio.sleep(2)
 
                             device = await self.GetFromCacheOrApi(
