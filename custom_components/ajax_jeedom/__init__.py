@@ -1,7 +1,9 @@
 '''Init.'''
+from homeassistant.components import persistent_notification
 from homeassistant.config_entries import ConfigEntry, ConfigEntryNotReady
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant, SupportsResponse
+from homeassistant.exceptions import ConfigEntryAuthFailed, HomeAssistantError
 
 from .ajax_service import AjaxService
 from .const import DOMAIN
@@ -20,8 +22,23 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     h = AjaxHub(hass, entry.data, entry)
     entry.runtime_data = h
 
+    notification_id = f"{DOMAIN}_{entry.entry_id}_loading"
+
+    def show_progress(message: str) -> None:
+        persistent_notification.async_create(
+            hass, message, title="Загрузка устройств Ajax", notification_id=notification_id
+        )
+
+    show_progress("Подключаемся к Ajax…")
     # Load Ajax Devices
-    await h.LoadAjaxDevices()
+    try:
+        await h.LoadAjaxDevices(show_progress)
+    except ConfigEntryAuthFailed:
+        raise
+    except HomeAssistantError as err:
+        raise ConfigEntryNotReady(str(err)) from err
+    finally:
+        persistent_notification.async_dismiss(hass, notification_id)
     if not h.hubs:
         error = h.ajax_api.last_exec_error or "Jeedom did not return any hubs"
         raise ConfigEntryNotReady(error)

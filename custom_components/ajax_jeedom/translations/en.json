@@ -7,12 +7,12 @@
         "error": {
             "cannot_connect": "[%key:common::config_flow::error::cannot_connect%]",
             "invalid_auth": "[%key:common::config_flow::error::invalid_auth%]",
-            "unknown": "[%key:common::config_flow::error::unknown%]"
+            "unknown": "[%key:common::config_flow::error::unknown%]",
+            "invalid_url": "Enter a valid HTTP or HTTPS URL"
         },
         "step": {
-            "user": {
+            "jeedom": {
                 "title": "Connect to JeeDom Server",
-
                 "data": {
                     "base_url": "JeeDom Url",
                     "auth_token": "Ajax API Token",
@@ -20,10 +20,41 @@
                     "replace_username": "Replace Ajax user name to HA user name in events",
                     "apply_hub_state_to_groups": "Apply Hub State changes to All Groups (experemental)"
                 }
+            },
+            "user": {
+                "title": "Connection method",
+                "menu_options": {
+                    "jeedom": "Installed Jeedom",
+                    "market": "Jeedom Market cloud"
+                }
+            },
+            "reconfigure": {
+                "title": "Connection method",
+                "menu_options": {
+                    "jeedom": "Installed Jeedom",
+                    "market": "Jeedom Market cloud"
+                }
+            },
+            "market": {
+                "title": "Jeedom Market and events",
+                "description": "Enter your Jeedom Market credentials, the external base URL of the Jeedom receiving events, and its Ajax System plugin API key. The Market password is not stored.",
+                "data": {
+                    "market_login": "Jeedom Market login",
+                    "market_password": "Jeedom Market password",
+                    "callback_url": "Event callback URL (Jeedom base URL)",
+                    "auth_token": "Jeedom Ajax System plugin API key"
+                }
+            },
+            "ajax": {
+                "title": "Sign in to Ajax",
+                "description": "Enter the credentials used in the Ajax Security System app. They are checked through the Jeedom cloud gateway and are not stored. Authentication errors can also indicate incorrect Market credentials.",
+                "data": {
+                    "ajax_login": "Ajax login (email)",
+                    "ajax_password": "Ajax password"
+                }
             }
         }
     },
-
     "options": {
         "step": {
             "init": {
