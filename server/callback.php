@@ -26,7 +26,7 @@ function debugLog(string $message, array $context = []): void
     }
 }
 
-function respond(int $status, string $message): never
+function respond(int $status, string $message): void
 {
     global $startedAt;
     debugLog('Request completed', [

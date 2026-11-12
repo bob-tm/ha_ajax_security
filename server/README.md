@@ -6,7 +6,7 @@ requests stay in the Home Assistant integration through Jeedom Market.
 
 ## Requirements
 
-- Apache 2.4 with PHP 8.1 or newer (PHP-FPM or mod_php).
+- Apache 2.4 with PHP 7.4 or newer (PHP-FPM or mod_php).
 - Apache `mod_rewrite` and `AllowOverride FileInfo` enabled for the installation folder.
 - An HTTPS address reachable by the Jeedom cloud gateway.
 - Network access from PHP to your existing MQTT broker.
@@ -35,6 +35,21 @@ archive or release. The server files must be committed and pushed to GitHub firs
 Run the same command to update; an existing `config.php` is preserved.
 Existing bridge code and `.htaccess` in the current directory are replaced.
 Use a dedicated folder, not the root of an existing application.
+
+## Update
+
+First commit and push your server changes to the `main` branch on GitHub.
+Then connect to your web server and run:
+
+```sh
+cd /path/to/domain/some-folder
+wget -qO- https://github.com/bob-tm/ha_ajax_security/raw/refs/heads/main/server/install.sh | sh
+```
+
+Replace the `cd` path with your installation directory if it differs.
+The installer replaces the bridge files and preserves your existing `config.php`,
+including MQTT credentials and the callback token. New configuration options
+must be copied manually from `config.example.php` into `config.php`.
 
 ## Configure
 
