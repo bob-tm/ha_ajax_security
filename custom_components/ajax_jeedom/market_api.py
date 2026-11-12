@@ -2,6 +2,8 @@
 
 import asyncio
 import json
+import re
+from urllib.parse import quote, quote_plus
 import time
 
 import aiohttp
@@ -10,7 +12,7 @@ from homeassistant.exceptions import ConfigEntryAuthFailed, HomeAssistantError
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.storage import Store
 
-from .const import DOMAIN
+from .const import DOMAIN, LOGGER
 
 
 class MarketApi:
@@ -39,6 +41,8 @@ class MarketApi:
                 params["options"] = json.dumps(data)
         else:
             kwargs["json"] = data
+        response_text = ""
+        status = None
         try:
             async with self.session.request(
                 method,
@@ -51,23 +55,33 @@ class MarketApi:
                 timeout=aiohttp.ClientTimeout(total=60),
                 **kwargs,
             ) as response:
+                status = response.status
+                response_text = await response.text()
                 if response.status in (401, 403):
                     raise ConfigEntryAuthFailed("Jeedom Market authentication rejected")
                 if response.status != 200:
                     raise HomeAssistantError(
                         f"Jeedom Market returned HTTP {response.status}"
                     )
-                result = await response.json(content_type=None)
+                result = json.loads(response_text)
         except (aiohttp.ClientError, TimeoutError, ValueError) as err:
+            self._log_error_response(method, path, status, response_text, data, token)
             raise HomeAssistantError("Unable to read Jeedom Market response") from err
+        except HomeAssistantError:
+            self._log_error_response(method, path, status, response_text, data, token)
+            raise
         if isinstance(result, str):
             try:
                 result = json.loads(result)
             except ValueError as err:
+                self._log_error_response(
+                    method, path, status, response_text, data, token
+                )
                 raise HomeAssistantError("Invalid Jeedom Market response") from err
         if isinstance(result, dict) and (
             "error" in result or "errors" in result or result.get("state") == "nok"
         ):
+            self._log_error_response(method, path, status, response_text, data, token)
             message = json.dumps(result).lower()
             if any(
                 term in message
@@ -87,6 +101,61 @@ class MarketApi:
         if isinstance(result, dict) and "body" in result:
             return result["body"]
         return result
+
+    def _log_error_response(self, method, path, status, response_text, data, token):
+        """Include the gateway response, with credentials removed."""
+        secrets = [token]
+        for source in (self.data, self.tokens, data or {}):
+            for key, value in source.items():
+                if re.search(
+                    r"password|token|apikey|authorization|autorization", key, re.I
+                ) and isinstance(value, str):
+                    secrets.append(value)
+
+        def collect_response_secrets(value):
+            if isinstance(value, dict):
+                for key, item in value.items():
+                    if re.search(
+                        r"password|token|apikey|authorization|autorization", key, re.I
+                    ) and isinstance(item, str):
+                        secrets.append(item)
+                    else:
+                        collect_response_secrets(item)
+            elif isinstance(value, list):
+                for item in value:
+                    collect_response_secrets(item)
+            elif isinstance(value, str):
+                try:
+                    nested = json.loads(value)
+                except ValueError:
+                    return
+                if isinstance(nested, (dict, list)):
+                    collect_response_secrets(nested)
+
+        collect_response_secrets(response_text)
+        body = response_text
+        for secret in sorted(
+            (value for value in secrets if value), key=len, reverse=True
+        ):
+            for value in {
+                secret,
+                quote(secret, safe=""),
+                quote_plus(secret),
+                json.dumps(secret)[1:-1],
+            }:
+                body = body.replace(value, "[redacted]")
+        body = re.sub(
+            r'(?i)("[^"\n]*(?:password|token|apikey|authorization|autorization)[^"\n]*"\s*:\s*)("(?:\\.|[^"\\])*"|[^,}\s]+)',
+            r'\1"[redacted]"',
+            body,
+        )
+        LOGGER.error(
+            "Jeedom Market request failed: %s %s, HTTP %s, response: %s",
+            method,
+            path,
+            status,
+            body if response_text else "<empty or unavailable>",
+        )
 
     async def login(self, username, password):
         """Exchange credentials without storing the password."""
