@@ -3,21 +3,29 @@ declare(strict_types=1);
 
 header('Content-Type: application/json');
 $config = [];
-$requestId = bin2hex(random_bytes(6));
+$mqttStatus = 'error';
+$eventData = null;
+$mqttError = null;
 $startedAt = microtime(true);
 
-function debugLog(string $message, array $context = []): void
+function debugLog(int $status, string $message): void
 {
-    global $config, $requestId;
+    global $config, $startedAt, $mqttStatus, $eventData, $mqttError;
     if (empty($config['debug'])) {
         return;
     }
-    $line = json_encode([
-        'time' => gmdate('c'),
-        'request_id' => $requestId,
-        'message' => $message,
-        'context' => $context,
-    ], JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE);
+    $entry = ['mqtt' => $mqttStatus];
+    if (!empty($config['debug_events']) && $eventData !== null) {
+        $entry['data'] = $eventData;
+    }
+    $entry['time'] = gmdate('c');
+    $entry['status'] = $status;
+    $entry['result'] = $message;
+    $entry['duration_ms'] = round((microtime(true) - $startedAt) * 1000);
+    if ($mqttError !== null) {
+        $entry['error'] = $mqttError;
+    }
+    $line = json_encode($entry, JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE);
     $file = $config['debug_log'] ?? '';
     if ($file === '') {
         error_log('Ajax bridge: ' . $line);
@@ -28,12 +36,7 @@ function debugLog(string $message, array $context = []): void
 
 function respond(int $status, string $message): void
 {
-    global $startedAt;
-    debugLog('Request completed', [
-        'status' => $status,
-        'result' => $message,
-        'duration_ms' => round((microtime(true) - $startedAt) * 1000),
-    ]);
+    debugLog($status, $message);
     http_response_code($status);
     echo json_encode(['message' => $message]);
     exit;
@@ -44,7 +47,6 @@ if (!is_file($configFile)) {
     respond(503, 'Bridge configuration is missing.');
 }
 $config = require $configFile;
-debugLog('Callback received', ['method' => $_SERVER['REQUEST_METHOD'] ?? '']);
 if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
     header('Allow: POST');
     respond(405, 'Use POST.');
@@ -73,21 +75,16 @@ if (!isset($data['data']) || !is_array($data['data'])) {
     respond(400, 'Missing event data.');
 }
 
-debugLog('Callback authenticated', ['bytes' => strlen($raw), 'event_count' => count($data['data'])]);
-if (!empty($config['debug_events'])) {
-    debugLog('Event data', ['data' => $data['data']]);
-}
+$eventData = $data['data'];
 require_once __DIR__ . '/lib/MqttPublisher.php';
 try {
-    debugLog('Publishing to MQTT', ['topic' => 'jeedom/raw/event']);
     MqttPublisher::publish($config['mqtt'], 'jeedom/raw/event', $raw);
 } catch (Throwable $error) {
-    debugLog('MQTT delivery failed', [
-        'error_type' => get_class($error),
-        'reason' => $error instanceof RuntimeException ? $error->getMessage() : 'Invalid configuration or internal error',
-    ]);
-    // Never log the request, credentials, or token.
-    error_log('Ajax bridge: MQTT delivery failed.');
+    $mqttError = $error instanceof RuntimeException ? $error->getMessage() : 'Invalid configuration or internal error';
+    if (empty($config['debug'])) {
+        error_log('Ajax bridge: MQTT delivery failed.');
+    }
     respond(503, 'MQTT delivery failed.');
 }
+$mqttStatus = 'ok';
 respond(200, 'Event forwarded.');
