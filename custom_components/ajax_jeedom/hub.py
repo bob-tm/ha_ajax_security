@@ -490,7 +490,7 @@ class AjaxHub:
                         ad = devices[u["id"]]
                         await ad.update_param_from_raw_api_mqtt_message(hub, u)
                     else:
-                        LOGGER.error(f"Device Not Found {u['id']}. Payload: {payload}")
+                        LOGGER.error("Device not found: %s in hub %s", u["id"], hub_id)
 
     async def parse_mqtt_message(self, topic, payload):
         """Check Mqtt Topics."""
@@ -500,10 +500,8 @@ class AjaxHub:
         try:
             if topic.startswith("jeedom/raw/event"):
                 await self.on_raw_event(payload)
-        except:
-            LOGGER.error(
-                f"Exception in parse_mqtt_message: topic {topic} and payload {payload}"
-            )
+        except Exception:
+            LOGGER.exception("Exception in parse_mqtt_message: topic %s", topic)
 
     async def Apply_HubState_ToGroups(self, hub, hubState):
         """Calculate group states from Hub state."""
@@ -924,21 +922,21 @@ class AjaxDevice:
 
         if hubState or updateGroupsStateFromHubState:
             if hubState:
-                hub = self.parentHub if self.devicetype != "HUB" else self
-                hub.SensorsValues["hub_state"] = hubState
+                hub_device = self.parentHub if self.devicetype != "HUB" else self
+                hub_device.SensorsValues["hub_state"] = hubState
                 LOGGER.debug(f"Hub State changed to {hubState}")
-                await hub.publish_updates("hub_state")
+                await hub_device.publish_updates("hub_state")
 
                 # Keep the hub-level night mode sensors in sync with non-night hub states.
                 # Ajax can report hub armed/disarmed without sending a matching night-mode reset.
                 if hubState in [STATE_ARMED, STATE_DISARMED]:
-                    if "night_mode_armed" in hub.SensorsValues:
-                        hub.SensorsValues["night_mode_armed"] = False
-                        await hub.publish_updates("night_mode_armed")
+                    if "night_mode_armed" in hub_device.SensorsValues:
+                        hub_device.SensorsValues["night_mode_armed"] = False
+                        await hub_device.publish_updates("night_mode_armed")
 
-                    if "night_mode_state" in hub.SensorsValues:
-                        hub.SensorsValues["night_mode_state"] = STATE_DISARMED
-                        await hub.publish_updates("night_mode_state")
+                    if "night_mode_state" in hub_device.SensorsValues:
+                        hub_device.SensorsValues["night_mode_state"] = STATE_DISARMED
+                        await hub_device.publish_updates("night_mode_state")
 
             if updateGroupsStateFromHubState:
                 await self.ha_Hub.Apply_HubState_ToGroups(
