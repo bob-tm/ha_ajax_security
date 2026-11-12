@@ -17,7 +17,7 @@ final class MqttPublisher
             'verify_peer_name' => true,
             'peer_name' => $host,
         ]]);
-        $address = str_contains($host, ':') ? '[' . $host . ']' : $host;
+        $address = strpos($host, ':') !== false ? '[' . $host . ']' : $host;
         $socket = @stream_socket_client(
             (($config['tls'] ?? false) ? 'tls' : 'tcp') . '://' . $address . ':' . $port,
             $errno, $error, $timeout, STREAM_CLIENT_CONNECT, $context
