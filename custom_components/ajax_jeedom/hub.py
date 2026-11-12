@@ -11,7 +11,7 @@ import time
 
 from homeassistant.components import mqtt
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.exceptions import ServiceValidationError
+from homeassistant.exceptions import ConfigEntryAuthFailed, ServiceValidationError
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.event import async_track_point_in_utc_time
@@ -36,6 +36,7 @@ from .const import (
     LOGGER,
 )
 from .JeedomAjaxApi import JeedomAjaxApi
+from .market_api import MarketApi
 from .mqtt_raw_event_parser import (
     STATE_ARMATTEMPT,
     STATE_ARMED,
@@ -252,18 +253,19 @@ class AjaxHub:
             device = await self.getCachedJsonFile("/devices/" + f)
             self.create_device(hubId, HubAjax, "DEVICE", {}, device)
 
-    async def LoadAjaxDevices(self):
+    async def LoadAjaxDevices(self, progress=None):
         """Create API and Load main config."""
         if (self._host == "test") and (self._apikey == "test"):
             await self.LoadTestConfig()
             return
 
-        self.ajax_api = JeedomAjaxApi(
-            async_get_clientsession(self.hass),
-            self._host,
-            self._apiurl,
-            self._apikey,
-        )
+        if self.config_entry.data.get("connection_type") == "market":
+            self.ajax_api = MarketApi(self.hass, self.config_entry.data, self.config_entry)
+            self.ajax_user_id = await self.ajax_api.get_userId()
+        else:
+            self.ajax_api = JeedomAjaxApi(
+                async_get_clientsession(self.hass), self._host, self._apiurl, self._apikey
+            )
         self.ajax_user_id = await self.GetUserIdFromCacheOrApi()
         if not self.ajax_user_id:
             LOGGER.error(
@@ -271,12 +273,16 @@ class AjaxHub:
             )
             return
 
+        if progress:
+            progress("Загружаем хабы…")
         # ajax={}
         hubs = await self.GetFromCacheOrApi("hubs")
         if hubs:
             # ajax['hubs']=hubs
             for h in hubs:
                 hubId = h["hubId"]
+                if progress:
+                    progress(f"Загружаем хаб {hubId}…")
                 hub_info = await self.GetFromCacheOrApi(f"hubs/{hubId}")
                 if hub_info:
                     # ajax['hubs'][hubId]=info
@@ -293,7 +299,10 @@ class AjaxHub:
 
                     devices = await self.GetFromCacheOrApi(f"hubs/{hubId}/devices")
                     if devices:
-                        for d in devices:
+                        for index, d in enumerate(devices, 1):
+                            if progress:
+                                name = d.get("deviceName", d["id"])
+                                progress(f"Хаб {hub_info['name']}: читаем устройство {index} из {len(devices)} — {name}")
                             LOGGER.debug(f"Geting Info for {d['id']}")
                             if not CACHE_AJAX_REQUESTS:
                                 await asyncio.sleep(2)
@@ -301,8 +310,12 @@ class AjaxHub:
                             device = await self.GetFromCacheOrApi(
                                 f"hubs/{hubId}/devices/{d['id']}", True
                             )
+                            if progress and device:
+                                progress(f"Хаб {hub_info['name']}: прочитано {index} из {len(devices)} — {device['deviceName']}")
                             try:
                                 self.create_device(hubId, HubAjax, "DEVICE", d, device)
+                            except ConfigEntryAuthFailed:
+                                raise
                             except Exception as e:
                                 LOGGER.error(
                                     f"Error while adding device {d['id']}. {e}"
